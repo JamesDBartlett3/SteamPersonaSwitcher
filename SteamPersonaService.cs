@@ -105,11 +105,20 @@ public class SteamPersonaService
         if (!_isRunning)
             return;
 
+        Console.WriteLine("[SERVICE] StopAsync called");
         RaiseStatus("Stopping service...");
         _isRunning = false;
         
         // Cancel any ongoing operations (including authentication)
-        _cancellationTokenSource?.Cancel();
+        try
+        {
+            _cancellationTokenSource?.Cancel();
+            Console.WriteLine("[SERVICE] Cancellation token triggered");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SERVICE] Error canceling token: {ex.Message}");
+        }
         
         // Stop game monitoring
         _gameCheckTimer?.Dispose();
@@ -119,21 +128,27 @@ public class SteamPersonaService
         if (_isAuthenticating)
         {
             RaiseStatus("Waiting for authentication to complete...");
+            Console.WriteLine("[SERVICE] Authentication in progress, waiting...");
             try
             {
-                // Wait up to 3 seconds for authentication to finish
-                var waitTask = Task.Run(async () =>
+                // Wait up to 2 seconds for authentication to finish
+                var maxWait = TimeSpan.FromSeconds(2);
+                var start = DateTime.Now;
+                while (_isAuthenticating && (DateTime.Now - start) < maxWait)
                 {
-                    var maxWait = TimeSpan.FromSeconds(3);
-                    var start = DateTime.Now;
-                    while (_isAuthenticating && (DateTime.Now - start) < maxWait)
-                    {
-                        await Task.Delay(100);
-                    }
-                });
-                await waitTask;
+                    await Task.Delay(100);
+                }
+                
+                if (_isAuthenticating)
+                {
+                    Console.WriteLine("[SERVICE] Authentication still in progress after timeout, forcing stop");
+                    _isAuthenticating = false; // Force it
+                }
             }
-            catch { /* Ignore timeout */ }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SERVICE] Error waiting for auth: {ex.Message}");
+            }
         }
 
         // Log off from Steam if connected
@@ -232,26 +247,43 @@ public class SteamPersonaService
             // Try to load existing session first
             if (_sessionManager != null && _sessionManager.HasSavedSession())
             {
+                Console.WriteLine("[SERVICE] Found saved session file");
                 try
                 {
                     var session = _sessionManager.LoadSession();
-                    if (session.HasValue && session.Value.Username == _config.Username)
+                    if (session.HasValue)
                     {
-                        refreshToken = session.Value.RefreshToken;
-                        RaiseStatus("Using saved session (no Steam Guard required)...");
-                        Console.WriteLine("[SERVICE] Attempting to use saved refresh token");
+                        Console.WriteLine($"[SERVICE] Loaded session for user: {session.Value.Username}");
+                        Console.WriteLine($"[SERVICE] Current config username: {_config.Username}");
+                        Console.WriteLine($"[SERVICE] Refresh token length: {session.Value.RefreshToken?.Length ?? 0}");
+                        
+                        if (session.Value.Username == _config.Username)
+                        {
+                            refreshToken = session.Value.RefreshToken;
+                            RaiseStatus("Using saved session (no Steam Guard required)...");
+                            Console.WriteLine("[SERVICE] ✓ Username matches, attempting to use saved refresh token");
+                        }
+                        else
+                        {
+                            RaiseStatus("Saved session is for different user, authenticating...");
+                            Console.WriteLine("[SERVICE] ✗ Username mismatch, will re-authenticate");
+                        }
                     }
                     else
                     {
-                        RaiseStatus("Saved session is for different user, authenticating...");
-                        Console.WriteLine("[SERVICE] Saved session username mismatch, will re-authenticate");
+                        Console.WriteLine("[SERVICE] ✗ Session file exists but returned null");
                     }
                 }
                 catch (Exception ex)
                 {
                     RaiseStatus($"Could not load saved session: {ex.Message}");
                     Console.WriteLine($"[SERVICE] Session load failed: {ex.Message}");
+                    Console.WriteLine($"[SERVICE] Exception type: {ex.GetType().Name}");
                 }
+            }
+            else
+            {
+                Console.WriteLine("[SERVICE] No saved session found");
             }
 
             // If we don't have a refresh token, do full authentication
@@ -266,7 +298,7 @@ public class SteamPersonaService
                     {
                         Username = _config.Username,
                         Password = _config.Password,
-                        IsPersistentSession = false,
+                        IsPersistentSession = true, // Request long-lived session token
                         Authenticator = new GuiSteamAuthenticator(),
                     });
 
@@ -380,33 +412,56 @@ public class SteamPersonaService
     {
         if (callback.Result != EResult.OK)
         {
-            // If the access token is invalid/expired, delete the saved session
+            // If the access token is invalid/expired, delete the saved session and retry
             if (callback.Result == EResult.InvalidPassword || 
                 callback.Result == EResult.AccessDenied ||
                 callback.Result == EResult.Expired)
             {
-                RaiseStatus($"Saved session expired or invalid. Deleting and will retry...");
-                Console.WriteLine($"[SERVICE] Session token invalid ({callback.Result}), clearing session");
+                RaiseStatus($"Saved session expired or invalid. Will re-authenticate...");
+                Console.WriteLine($"[SERVICE] Session token invalid ({callback.Result}), clearing session and reconnecting");
                 
                 if (_sessionManager != null && _sessionManager.HasSavedSession())
                 {
                     try
                     {
                         _sessionManager.DeleteSession();
+                        Console.WriteLine("[SERVICE] Expired session deleted");
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[SERVICE] Failed to delete expired session: {ex.Message}");
                     }
                 }
+                
+                // Disconnect and reconnect to trigger fresh authentication
+                if (_steamClient != null && _steamClient.IsConnected)
+                {
+                    Console.WriteLine("[SERVICE] Disconnecting to trigger re-authentication");
+                    _steamClient.Disconnect();
+                    
+                    // Reconnect after a short delay (this will go through OnConnected again, without a saved session)
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(2000);
+                        if (_isRunning && _steamClient != null)
+                        {
+                            Console.WriteLine("[SERVICE] Reconnecting for fresh authentication");
+                            RaiseStatus("Reconnecting for fresh authentication...");
+                            _steamClient.Connect();
+                        }
+                    });
+                }
+                return;
             }
             
+            // For other errors, stop the service
             RaiseError($"Unable to logon to Steam: {callback.Result} / {callback.ExtendedResult}");
             _ = StopAsync();
             return;
         }
 
         RaiseStatus("Successfully logged on!");
+        Console.WriteLine("[SERVICE] Successfully logged on to Steam");
         _isLoggedIn = true;
     }
 

@@ -14,7 +14,7 @@ namespace SteamPersonaSwitcher;
 public partial class MainWindow : Window
 {
     private readonly SteamPersonaService _service;
-    private ObservableCollection<KeyValuePair<string, string>> _gamePersonaMappings;
+    private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
     private bool _isClosingToTray = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
@@ -59,9 +59,10 @@ public partial class MainWindow : Window
         
         _service = new SteamPersonaService();
         _service.SetSessionManager(_sessionManager);
-        _gamePersonaMappings = new ObservableCollection<KeyValuePair<string, string>>();
+        _gamePersonaMappings = new ObservableCollection<GamePersonaMapping>();
         
         GamePersonaGrid.ItemsSource = _gamePersonaMappings;
+        Console.WriteLine("[UI] Game persona grid initialized");
         
         // Subscribe to service events
         _service.StatusChanged += OnStatusChanged;
@@ -126,8 +127,11 @@ public partial class MainWindow : Window
 
     private void AppendStatus(string message)
     {
-        StatusTextBox.AppendText(message + Environment.NewLine);
-        StatusTextBox.ScrollToEnd();
+        Dispatcher.Invoke(() =>
+        {
+            StatusTextBox.AppendText(message + Environment.NewLine);
+            StatusTextBox.ScrollToEnd();
+        });
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
@@ -197,8 +201,10 @@ public partial class MainWindow : Window
             Password = password,
             CheckIntervalSeconds = interval,
             DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
-            GamePersonaNames = _gamePersonaMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+            GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
         };
+        
+        Console.WriteLine($"[UI] Starting with {_gamePersonaMappings.Count} game mappings");
 
         // Disable controls
         StartButton.IsEnabled = false;
@@ -217,13 +223,39 @@ public partial class MainWindow : Window
         Console.WriteLine("[UI] Stop button clicked");
         
         StopButton.IsEnabled = false;
-        StartButton.IsEnabled = true;
-        UsernameTextBox.IsEnabled = true;
-        PasswordBox.IsEnabled = true;
-        RememberMeCheckBox.IsEnabled = true;
+        AppendStatus("Stopping service...");
 
-        await _service.StopAsync();
-        Console.WriteLine("[UI] Service stopped");
+        try
+        {
+            // Stop with a timeout
+            var stopTask = _service.StopAsync();
+            var timeoutTask = Task.Delay(5000); // 5 second timeout
+            
+            var completedTask = await Task.WhenAny(stopTask, timeoutTask);
+            
+            if (completedTask == timeoutTask)
+            {
+                Console.WriteLine("[UI] Stop operation timed out");
+                AppendStatus("Warning: Stop operation timed out. The service may still be running.");
+            }
+            else
+            {
+                Console.WriteLine("[UI] Service stopped successfully");
+                AppendStatus("Service stopped.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Stop error: {ex.Message}");
+            AppendStatus($"Error stopping service: {ex.Message}");
+        }
+        finally
+        {
+            StartButton.IsEnabled = true;
+            UsernameTextBox.IsEnabled = true;
+            PasswordBox.IsEnabled = true;
+            RememberMeCheckBox.IsEnabled = true;
+        }
     }
 
     private void AddGame_Click(object sender, RoutedEventArgs e)
@@ -238,19 +270,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        Console.WriteLine($"[UI] Adding game mapping: {processName} -> {personaName}");
+
         // Check if already exists
-        if (_gamePersonaMappings.Any(kvp => kvp.Key.Equals(processName, StringComparison.OrdinalIgnoreCase)))
+        if (_gamePersonaMappings.Any(m => m.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase)))
         {
+            Console.WriteLine($"[UI] Duplicate mapping detected for {processName}");
             MessageBox.Show($"A mapping for '{processName}' already exists.", 
                 "Duplicate Entry", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        _gamePersonaMappings.Add(new KeyValuePair<string, string>(processName, personaName));
+        _gamePersonaMappings.Add(new GamePersonaMapping 
+        { 
+            ProcessName = processName, 
+            PersonaName = personaName 
+        });
+        
+        Console.WriteLine($"[UI] Game mapping added. Total mappings: {_gamePersonaMappings.Count}");
         
         // Clear inputs
-        NewGameProcessTextBox.Text = string.Empty;
-        NewPersonaNameTextBox.Text = string.Empty;
+        NewGameProcessTextBox.Text = "game.exe";
+        NewPersonaNameTextBox.Text = "Playing Game";
         
         AppendStatus($"Added mapping: {processName} → {personaName}");
     }
@@ -259,10 +300,12 @@ public partial class MainWindow : Window
     {
         if (sender is Button button && button.Tag is string processName)
         {
-            var item = _gamePersonaMappings.FirstOrDefault(kvp => kvp.Key == processName);
-            if (!item.Equals(default(KeyValuePair<string, string>)))
+            Console.WriteLine($"[UI] Removing game mapping: {processName}");
+            var item = _gamePersonaMappings.FirstOrDefault(m => m.ProcessName == processName);
+            if (item != null)
             {
                 _gamePersonaMappings.Remove(item);
+                Console.WriteLine($"[UI] Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
                 AppendStatus($"Removed mapping: {processName}");
             }
         }
@@ -278,8 +321,10 @@ public partial class MainWindow : Window
                 Username = UsernameTextBox.Text.Trim(),
                 CheckIntervalSeconds = int.TryParse(CheckIntervalTextBox.Text, out int interval) ? interval : 10,
                 DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
-                GamePersonaNames = _gamePersonaMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
             };
+            
+            Console.WriteLine($"[Config] Saving {_gamePersonaMappings.Count} game persona mappings");
 
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -363,9 +408,13 @@ public partial class MainWindow : Window
     {
         try
         {
+            Console.WriteLine("[Config] LoadConfiguration called");
             if (File.Exists(_configFilePath))
             {
+                Console.WriteLine($"[Config] Loading config from: {_configFilePath}");
                 var yaml = File.ReadAllText(_configFilePath);
+                Console.WriteLine($"[Config] YAML content length: {yaml.Length}");
+                
                 var deserializer = new DeserializerBuilder()
                     .WithNamingConvention(CamelCaseNamingConvention.Instance)
                     .Build();
@@ -373,15 +422,30 @@ public partial class MainWindow : Window
 
                 if (config != null)
                 {
+                    Console.WriteLine($"[Config] Config deserialized. GamePersonaNames count: {config.GamePersonaNames?.Count ?? 0}");
+                    
                     UsernameTextBox.Text = config.Username;
                     CheckIntervalTextBox.Text = config.CheckIntervalSeconds.ToString();
                     DefaultPersonaTextBox.Text = config.DefaultPersonaName;
 
                     _gamePersonaMappings.Clear();
-                    foreach (var kvp in config.GamePersonaNames)
+                    Console.WriteLine("[Config] Cleared existing mappings");
+                    
+                    if (config.GamePersonaNames != null)
                     {
-                        _gamePersonaMappings.Add(kvp);
+                        foreach (var kvp in config.GamePersonaNames)
+                        {
+                            Console.WriteLine($"[Config] Adding mapping: {kvp.Key} -> {kvp.Value}");
+                            _gamePersonaMappings.Add(new GamePersonaMapping
+                            {
+                                ProcessName = kvp.Key,
+                                PersonaName = kvp.Value
+                            });
+                        }
                     }
+                    
+                    Console.WriteLine($"[Config] Loaded {_gamePersonaMappings.Count} game persona mappings");
+                    Console.WriteLine($"[Config] GamePersonaGrid.Items.Count: {GamePersonaGrid.Items.Count}");
 
                     AppendStatus($"Configuration loaded from {_configFilePath}");
                 }
@@ -391,8 +455,17 @@ public partial class MainWindow : Window
                 AppendStatus($"No configuration file found at {_configFilePath}. Using default settings.");
                 
                 // Add some default game mappings
-                _gamePersonaMappings.Add(new KeyValuePair<string, string>("hl2.exe", "Playing Half-Life 2"));
-                _gamePersonaMappings.Add(new KeyValuePair<string, string>("csgo.exe", "Playing CS:GO"));
+                _gamePersonaMappings.Add(new GamePersonaMapping 
+                { 
+                    ProcessName = "hl2.exe", 
+                    PersonaName = "Playing Half-Life 2" 
+                });
+                _gamePersonaMappings.Add(new GamePersonaMapping 
+                { 
+                    ProcessName = "csgo.exe", 
+                    PersonaName = "Playing CS:GO" 
+                });
+                Console.WriteLine($"[Config] Added {_gamePersonaMappings.Count} default game persona mappings");
             }
             
             // Load saved credentials if they exist
