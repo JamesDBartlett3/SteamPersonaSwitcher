@@ -1,0 +1,13 @@
+{
+  "username": "your_steam_username",
+  "password": "your_steam_password",
+  "checkIntervalSeconds": 10,
+  "gamePersonaNames": {
+    "hl2.exe": "Playing Half-Life 2",
+    "csgo.exe": "Pwning noobs in CS:GO",
+    "dota2.exe": "Feeding in Dota 2",
+    "EldenRing.exe": "Getting wrecked in Elden Ring",
+    "RocketLeague.exe": "Whiffing in Rocket League"
+  },
+  "defaultPersonaName": "Not Gaming"
+}
