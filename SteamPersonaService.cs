@@ -18,9 +18,11 @@ public class SteamPersonaService
     private Timer? _gameCheckTimer;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _callbackTask;
+    private readonly SemaphoreSlim _authenticationLock = new SemaphoreSlim(1, 1);
     
     private bool _isRunning = false;
     private bool _isLoggedIn = false;
+    private bool _isAuthenticating = false;
     private string _currentPersonaName = string.Empty;
     
     private Config? _config;
@@ -43,8 +45,23 @@ public class SteamPersonaService
             return Task.CompletedTask;
         }
 
+        // Ensure we're in a clean state before starting
+        if (_steamClient != null)
+        {
+            try
+            {
+                if (_steamClient.IsConnected)
+                {
+                    _steamClient.Disconnect();
+                }
+            }
+            catch { /* Ignore errors during cleanup */ }
+        }
+
         _config = config;
         _isRunning = true;
+        _isLoggedIn = false;
+        _currentPersonaName = string.Empty;
         _cancellationTokenSource = new CancellationTokenSource();
 
         try
@@ -85,25 +102,83 @@ public class SteamPersonaService
         RaiseStatus("Stopping service...");
         _isRunning = false;
         
+        // Cancel any ongoing operations (including authentication)
+        _cancellationTokenSource?.Cancel();
+        
+        // Stop game monitoring
         _gameCheckTimer?.Dispose();
         _gameCheckTimer = null;
 
-        if (_isLoggedIn)
+        // Wait for authentication to complete if in progress
+        if (_isAuthenticating)
         {
-            _steamUser?.LogOff();
+            RaiseStatus("Waiting for authentication to complete...");
+            try
+            {
+                // Wait up to 3 seconds for authentication to finish
+                var waitTask = Task.Run(async () =>
+                {
+                    var maxWait = TimeSpan.FromSeconds(3);
+                    var start = DateTime.Now;
+                    while (_isAuthenticating && (DateTime.Now - start) < maxWait)
+                    {
+                        await Task.Delay(100);
+                    }
+                });
+                await waitTask;
+            }
+            catch { /* Ignore timeout */ }
         }
 
-        _cancellationTokenSource?.Cancel();
+        // Log off from Steam if connected
+        if (_isLoggedIn && _steamUser != null)
+        {
+            try
+            {
+                _steamUser.LogOff();
+                await Task.Delay(500); // Give it a moment to log off gracefully
+            }
+            catch (Exception ex)
+            {
+                RaiseStatus($"Error during logoff: {ex.Message}");
+            }
+        }
+
+        // Disconnect from Steam
+        if (_steamClient != null && _steamClient.IsConnected)
+        {
+            try
+            {
+                _steamClient.Disconnect();
+            }
+            catch (Exception ex)
+            {
+                RaiseStatus($"Error during disconnect: {ex.Message}");
+            }
+        }
         
+        // Wait for callback task to complete
         if (_callbackTask != null)
         {
-            await _callbackTask;
+            try
+            {
+                await _callbackTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancelling
+            }
+            catch (Exception ex)
+            {
+                RaiseStatus($"Error stopping callback loop: {ex.Message}");
+            }
         }
 
-        _steamClient?.Disconnect();
-        
+        // Cleanup
         _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = null;
+        _callbackTask = null;
+        _isLoggedIn = false;
         
         RaiseStatus("Service stopped.");
         ConnectionStateChanged?.Invoke(this, false);
@@ -119,12 +194,34 @@ public class SteamPersonaService
 
     private async void OnConnected(SteamClient.ConnectedCallback callback)
     {
-        RaiseStatus($"Connected to Steam! Logging in as '{_config!.Username}'...");
-        ConnectionStateChanged?.Invoke(this, true);
+        // Check if we're still supposed to be running
+        if (!_isRunning)
+        {
+            RaiseStatus("Connection received but service is stopping.");
+            return;
+        }
+
+        // Prevent multiple simultaneous authentication attempts
+        if (_isAuthenticating)
+        {
+            RaiseStatus("Authentication already in progress, ignoring duplicate connection.");
+            return;
+        }
+
+        // Try to acquire the authentication lock
+        if (!await _authenticationLock.WaitAsync(0))
+        {
+            RaiseStatus("Authentication already in progress.");
+            return;
+        }
 
         try
         {
-            // Use modern authentication flow
+            _isAuthenticating = true;
+            RaiseStatus($"Connected to Steam! Logging in as '{_config!.Username}'...");
+            ConnectionStateChanged?.Invoke(this, true);
+
+            // Use modern authentication flow with cancellation support
             var authSession = await _steamClient!.Authentication.BeginAuthSessionViaCredentialsAsync(
                 new AuthSessionDetails
                 {
@@ -134,7 +231,22 @@ public class SteamPersonaService
                     Authenticator = new UserConsoleAuthenticator(),
                 });
 
-            var pollResponse = await authSession.PollingWaitForResultAsync();
+            // Check again before waiting for result
+            if (!_isRunning)
+            {
+                RaiseStatus("Authentication started but service is stopping.");
+                return;
+            }
+
+            // Pass cancellation token to polling
+            var pollResponse = await authSession.PollingWaitForResultAsync(_cancellationTokenSource?.Token ?? CancellationToken.None);
+
+            // Final check before logging on
+            if (!_isRunning)
+            {
+                RaiseStatus("Authentication completed but service is stopping.");
+                return;
+            }
 
             _steamUser!.LogOn(new SteamUser.LogOnDetails
             {
@@ -142,26 +254,62 @@ public class SteamPersonaService
                 AccessToken = pollResponse.RefreshToken,
             });
         }
+        catch (TaskCanceledException)
+        {
+            RaiseStatus("Authentication cancelled.");
+        }
+        catch (OperationCanceledException)
+        {
+            RaiseStatus("Authentication cancelled.");
+        }
         catch (Exception ex)
         {
-            RaiseError($"Authentication failed: {ex.Message}");
-            await StopAsync();
+            if (!_isRunning)
+            {
+                // Service is stopping, this is expected
+                RaiseStatus("Authentication interrupted due to service stop.");
+            }
+            else
+            {
+                RaiseError($"Authentication failed: {ex.Message}");
+                _ = Task.Run(async () => await StopAsync());
+            }
+        }
+        finally
+        {
+            _isAuthenticating = false;
+            _authenticationLock.Release();
         }
     }
 
     private void OnDisconnected(SteamClient.DisconnectedCallback callback)
     {
-        RaiseStatus("Disconnected from Steam. Attempting reconnect in 5 seconds...");
         _isLoggedIn = false;
         ConnectionStateChanged?.Invoke(this, false);
         
-        // Schedule reconnection on a separate task to avoid blocking the callback thread
-        _ = HandleReconnectAsync();
+        // Only attempt to reconnect if the service is still supposed to be running
+        // and the disconnect wasn't initiated by the user
+        if (_isRunning && !callback.UserInitiated)
+        {
+            RaiseStatus("Disconnected from Steam. Attempting reconnect in 5 seconds...");
+            // Schedule reconnection on a separate task to avoid blocking the callback thread
+            _ = HandleReconnectAsync();
+        }
+        else if (callback.UserInitiated)
+        {
+            RaiseStatus("Disconnected from Steam (user initiated).");
+        }
+        else
+        {
+            RaiseStatus("Disconnected from Steam.");
+        }
     }
 
     private async Task HandleReconnectAsync()
     {
         await Task.Delay(5000);
+        
+        // Check again after delay in case the service was stopped
         if (_isRunning)
         {
             RaiseStatus("Reconnecting...");

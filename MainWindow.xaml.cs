@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private readonly string _configDirectory;
     private readonly string _configFilePath;
     private readonly string _trayPreferencesPath;
+    private readonly CredentialManager _credentialManager;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
@@ -38,6 +39,9 @@ public partial class MainWindow : Window
         {
             Directory.CreateDirectory(_configDirectory);
         }
+        
+        // Initialize credential manager
+        _credentialManager = new CredentialManager(_configDirectory);
         
         // Get tray icon from resources
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)FindResource("TrayIcon");
@@ -134,11 +138,37 @@ public partial class MainWindow : Window
             return;
         }
 
+        var username = UsernameTextBox.Text.Trim();
+        var password = PasswordBox.Password;
+
+        // Save or delete credentials based on Remember Me checkbox
+        try
+        {
+            if (RememberMeCheckBox.IsChecked == true)
+            {
+                _credentialManager.SaveCredentials(username, password);
+                AppendStatus("Credentials saved securely.");
+            }
+            else
+            {
+                // If Remember Me is unchecked, delete any saved credentials
+                if (_credentialManager.HasSavedCredentials())
+                {
+                    _credentialManager.DeleteCredentials();
+                    AppendStatus("Saved credentials removed.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendStatus($"Warning: Failed to save credentials: {ex.Message}");
+        }
+
         // Create config from UI
         var config = new Config
         {
-            Username = UsernameTextBox.Text.Trim(),
-            Password = PasswordBox.Password,
+            Username = username,
+            Password = password,
             CheckIntervalSeconds = interval,
             DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
             GamePersonaNames = _gamePersonaMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
@@ -149,6 +179,7 @@ public partial class MainWindow : Window
         StopButton.IsEnabled = true;
         UsernameTextBox.IsEnabled = false;
         PasswordBox.IsEnabled = false;
+        RememberMeCheckBox.IsEnabled = false;
 
         AppendStatus("Starting Steam Persona Switcher...");
         
@@ -161,6 +192,7 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = true;
         UsernameTextBox.IsEnabled = true;
         PasswordBox.IsEnabled = true;
+        RememberMeCheckBox.IsEnabled = true;
 
         await _service.StopAsync();
     }
@@ -245,6 +277,42 @@ public partial class MainWindow : Window
         LoadConfiguration();
     }
 
+    private void ClearCredentials_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!_credentialManager.HasSavedCredentials())
+            {
+                MessageBox.Show("No saved credentials found.", "Information",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                "Are you sure you want to delete your saved credentials?\n\n" +
+                "You will need to re-enter your username and password next time.",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                _credentialManager.DeleteCredentials();
+                RememberMeCheckBox.IsChecked = false;
+                PasswordBox.Password = string.Empty;
+                AppendStatus("Saved credentials deleted.");
+                MessageBox.Show("Saved credentials have been deleted.", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendStatus($"Failed to delete credentials: {ex.Message}");
+            MessageBox.Show($"Failed to delete credentials: {ex.Message}", "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void LoadConfiguration()
     {
         try
@@ -281,12 +349,42 @@ public partial class MainWindow : Window
                 _gamePersonaMappings.Add(new KeyValuePair<string, string>("csgo.exe", "Playing CS:GO"));
             }
             
+            // Load saved credentials if they exist
+            LoadSavedCredentials();
+            
             // Load tray preferences
             LoadTrayPreferences();
         }
         catch (Exception ex)
         {
             AppendStatus($"Failed to load config: {ex.Message}");
+        }
+    }
+
+    private void LoadSavedCredentials()
+    {
+        try
+        {
+            if (_credentialManager.HasSavedCredentials())
+            {
+                var credentials = _credentialManager.LoadCredentials();
+                if (credentials.HasValue)
+                {
+                    UsernameTextBox.Text = credentials.Value.Username;
+                    PasswordBox.Password = credentials.Value.Password;
+                    RememberMeCheckBox.IsChecked = true;
+                    AppendStatus("Saved credentials loaded securely.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendStatus($"Failed to load saved credentials: {ex.Message}");
+            MessageBox.Show(
+                $"Could not load saved credentials: {ex.Message}\n\nPlease re-enter your credentials.",
+                "Credential Load Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 
