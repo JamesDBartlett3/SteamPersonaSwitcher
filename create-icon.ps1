@@ -19,7 +19,7 @@ $y = ($size - $textSize.Height) / 2
 $g.DrawString($text, $font, [System.Drawing.Brushes]::White, $x, $y)
 
 # Save as PNG first (easier than ICO)
-$pngPath = "c:\Users\James\GitHub\SteamPersonaSwitcher\icon.png"
+$pngPath = "$PSScriptRoot\icon.png"
 $bmp.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
 # Create smaller versions for ICO
@@ -28,7 +28,7 @@ $bmp32 = New-Object System.Drawing.Bitmap($bmp, 32, 32)
 $bmp48 = New-Object System.Drawing.Bitmap($bmp, 48, 48)
 
 # Convert to ICO using Icon class
-$icoPath = "c:\Users\James\GitHub\SteamPersonaSwitcher\icon.ico"
+$icoPath = "$PSScriptRoot\icon.ico"
 $icon = [System.Drawing.Icon]::FromHandle($bmp32.GetHicon())
 $fileStream = [System.IO.File]::Create($icoPath)
 $icon.Save($fileStream)
