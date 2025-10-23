@@ -1,0 +1,257 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using SteamKit2;
+using SteamKit2.Authentication;
+
+namespace SteamPersonaSwitcher;
+
+public class SteamPersonaService
+{
+    private SteamClient? _steamClient;
+    private CallbackManager? _manager;
+    private SteamUser? _steamUser;
+    private SteamFriends? _steamFriends;
+    private Timer? _gameCheckTimer;
+    private CancellationTokenSource? _cancellationTokenSource;
+    private Task? _callbackTask;
+    
+    private bool _isRunning = false;
+    private bool _isLoggedIn = false;
+    private string _currentPersonaName = string.Empty;
+    
+    private Config? _config;
+
+    // Events for UI updates
+    public event EventHandler<string>? StatusChanged;
+    public event EventHandler<string>? PersonaChanged;
+    public event EventHandler<string>? ErrorOccurred;
+    public event EventHandler<bool>? ConnectionStateChanged;
+
+    public bool IsRunning => _isRunning;
+    public bool IsLoggedIn => _isLoggedIn;
+    public string CurrentPersonaName => _currentPersonaName;
+
+    public Task StartAsync(Config config)
+    {
+        if (_isRunning)
+        {
+            RaiseStatus("Service is already running.");
+            return Task.CompletedTask;
+        }
+
+        _config = config;
+        _isRunning = true;
+        _cancellationTokenSource = new CancellationTokenSource();
+
+        try
+        {
+            // Initialize SteamKit
+            _steamClient = new SteamClient();
+            _manager = new CallbackManager(_steamClient);
+            _steamUser = _steamClient.GetHandler<SteamUser>();
+            _steamFriends = _steamClient.GetHandler<SteamFriends>();
+
+            // Register callbacks
+            _manager.Subscribe<SteamClient.ConnectedCallback>(OnConnected);
+            _manager.Subscribe<SteamClient.DisconnectedCallback>(OnDisconnected);
+            _manager.Subscribe<SteamUser.LoggedOnCallback>(OnLoggedOn);
+            _manager.Subscribe<SteamUser.LoggedOffCallback>(OnLoggedOff);
+            _manager.Subscribe<SteamUser.AccountInfoCallback>(OnAccountInfo);
+
+            RaiseStatus("Connecting to Steam...");
+            _steamClient.Connect();
+
+            // Start callback loop on background thread
+            _callbackTask = Task.Run(() => CallbackLoop(_cancellationTokenSource.Token));
+        }
+        catch (Exception ex)
+        {
+            RaiseError($"Failed to start service: {ex.Message}");
+            _isRunning = false;
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    public async Task StopAsync()
+    {
+        if (!_isRunning)
+            return;
+
+        RaiseStatus("Stopping service...");
+        _isRunning = false;
+        
+        _gameCheckTimer?.Dispose();
+        _gameCheckTimer = null;
+
+        if (_isLoggedIn)
+        {
+            _steamUser?.LogOff();
+        }
+
+        _cancellationTokenSource?.Cancel();
+        
+        if (_callbackTask != null)
+        {
+            await _callbackTask;
+        }
+
+        _steamClient?.Disconnect();
+        
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = null;
+        
+        RaiseStatus("Service stopped.");
+        ConnectionStateChanged?.Invoke(this, false);
+    }
+
+    private void CallbackLoop(CancellationToken cancellationToken)
+    {
+        while (_isRunning && !cancellationToken.IsCancellationRequested)
+        {
+            _manager?.RunWaitCallbacks(TimeSpan.FromSeconds(1));
+        }
+    }
+
+    private async void OnConnected(SteamClient.ConnectedCallback callback)
+    {
+        RaiseStatus($"Connected to Steam! Logging in as '{_config!.Username}'...");
+        ConnectionStateChanged?.Invoke(this, true);
+
+        try
+        {
+            // Use modern authentication flow
+            var authSession = await _steamClient!.Authentication.BeginAuthSessionViaCredentialsAsync(
+                new AuthSessionDetails
+                {
+                    Username = _config.Username,
+                    Password = _config.Password,
+                    IsPersistentSession = false,
+                    Authenticator = new UserConsoleAuthenticator(),
+                });
+
+            var pollResponse = await authSession.PollingWaitForResultAsync();
+
+            _steamUser!.LogOn(new SteamUser.LogOnDetails
+            {
+                Username = pollResponse.AccountName,
+                AccessToken = pollResponse.RefreshToken,
+            });
+        }
+        catch (Exception ex)
+        {
+            RaiseError($"Authentication failed: {ex.Message}");
+            await StopAsync();
+        }
+    }
+
+    private void OnDisconnected(SteamClient.DisconnectedCallback callback)
+    {
+        RaiseStatus("Disconnected from Steam. Attempting reconnect in 5 seconds...");
+        _isLoggedIn = false;
+        ConnectionStateChanged?.Invoke(this, false);
+        
+        Thread.Sleep(5000);
+        
+        if (_isRunning)
+        {
+            RaiseStatus("Reconnecting...");
+            _steamClient?.Connect();
+        }
+    }
+
+    private void OnLoggedOn(SteamUser.LoggedOnCallback callback)
+    {
+        if (callback.Result != EResult.OK)
+        {
+            RaiseError($"Unable to logon to Steam: {callback.Result} / {callback.ExtendedResult}");
+            _ = StopAsync();
+            return;
+        }
+
+        RaiseStatus("Successfully logged on!");
+        _isLoggedIn = true;
+    }
+
+    private void OnLoggedOff(SteamUser.LoggedOffCallback callback)
+    {
+        RaiseStatus($"Logged off of Steam: {callback.Result}");
+        _isLoggedIn = false;
+        ConnectionStateChanged?.Invoke(this, false);
+    }
+
+    private void OnAccountInfo(SteamUser.AccountInfoCallback callback)
+    {
+        // Set initial persona state to Online
+        _steamFriends!.SetPersonaState(EPersonaState.Online);
+        
+        RaiseStatus($"Account info received. Current name: {callback.PersonaName}");
+        RaiseStatus($"Starting game monitoring (checking every {_config!.CheckIntervalSeconds} seconds)...");
+
+        // Start monitoring games
+        _gameCheckTimer = new Timer(CheckForRunningGames, null, 
+            TimeSpan.Zero, 
+            TimeSpan.FromSeconds(_config!.CheckIntervalSeconds));
+    }
+
+    private void CheckForRunningGames(object? state)
+    {
+        if (!_isLoggedIn || _config == null)
+            return;
+
+        try
+        {
+            var processes = Process.GetProcesses();
+            string? newPersonaName = null;
+
+            // Check if any configured game is running
+            foreach (var process in processes)
+            {
+                try
+                {
+                    var processName = process.ProcessName + ".exe";
+                    
+                    if (_config.GamePersonaNames.ContainsKey(processName))
+                    {
+                        newPersonaName = _config.GamePersonaNames[processName];
+                        break;
+                    }
+                }
+                catch
+                {
+                    // Ignore processes we can't access
+                }
+            }
+
+            // Use default name if no game is running
+            newPersonaName ??= _config.DefaultPersonaName;
+
+            // Only update if the name has changed
+            if (newPersonaName != _currentPersonaName)
+            {
+                RaiseStatus($"Changing persona name to: {newPersonaName}");
+                _steamFriends?.SetPersonaName(newPersonaName);
+                _currentPersonaName = newPersonaName;
+                PersonaChanged?.Invoke(this, newPersonaName);
+            }
+        }
+        catch (Exception ex)
+        {
+            RaiseError($"Error checking games: {ex.Message}");
+        }
+    }
+
+    private void RaiseStatus(string message)
+    {
+        StatusChanged?.Invoke(this, message);
+    }
+
+    private void RaiseError(string message)
+    {
+        ErrorOccurred?.Invoke(this, message);
+    }
+}
