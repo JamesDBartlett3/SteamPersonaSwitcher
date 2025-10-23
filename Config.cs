@@ -15,6 +15,7 @@ public class Config
     [YamlMember(Alias = "defaultPersonaName")]
     public string DefaultPersonaName { get; set; } = "Not Gaming";
 
+    // Password is required at runtime for authentication, but is not serialized to YAML for security reasons.
     [YamlIgnore]
     public string Password { get; set; } = string.Empty;
 }
