@@ -1,20 +1,21 @@
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using YamlDotNet.Serialization;
 
 public class Config
 {
-    [JsonPropertyName("username")]
+    [YamlMember(Alias = "username")]
     public string Username { get; set; } = string.Empty;
 
-    [JsonPropertyName("password")]
-    public string Password { get; set; } = string.Empty;
-
-    [JsonPropertyName("checkIntervalSeconds")]
+    [YamlMember(Alias = "checkIntervalSeconds")]
     public int CheckIntervalSeconds { get; set; } = 10;
 
-    [JsonPropertyName("gamePersonaNames")]
+    [YamlMember(Alias = "gamePersonaNames")]
     public Dictionary<string, string> GamePersonaNames { get; set; } = new();
 
-    [JsonPropertyName("defaultPersonaName")]
+    [YamlMember(Alias = "defaultPersonaName")]
     public string DefaultPersonaName { get; set; } = "Not Gaming";
+
+    // Password is required at runtime for authentication, but is not serialized to YAML for security reasons.
+    [YamlIgnore]
+    public string Password { get; set; } = string.Empty;
 }

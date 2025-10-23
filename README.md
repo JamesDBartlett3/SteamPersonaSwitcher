@@ -24,15 +24,15 @@ This application uses [SteamKit2](https://github.com/SteamRE/SteamKit) to mainta
 ## Installation
 
 ### Option 1: Download Pre-built Release
-1. Download the latest release from the [Releases](https://github.com/JamesDBartlett3/SteamPersonaChanger/releases) page
+1. Download the latest release from the [Releases](https://github.com/JamesDBartlett3/SteamPersonaSwitcher/releases) page
 2. Extract the files
 3. Edit `config.json` with your details
-4. Run `SteamPersonaChanger.exe`
+4. Run `SteamPersonaSwitcher.exe`
 
 ### Option 2: Build from Source
 ```bash
-git clone https://github.com/JamesDBartlett3/SteamPersonaChanger.git
-cd SteamPersonaChanger
+git clone https://github.com/JamesDBartlett3/SteamPersonaSwitcher.git
+cd SteamPersonaSwitcher
 dotnet build
 dotnet run
 ```
