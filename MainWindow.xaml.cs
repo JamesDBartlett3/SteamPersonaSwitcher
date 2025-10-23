@@ -307,9 +307,9 @@ public partial class MainWindow : Window
             var yaml = serializer.Serialize(prefs);
             File.WriteAllText(_trayPreferencesPath, yaml);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail - not critical
+            AppendStatus($"Failed to save tray preferences: {ex.Message}");
         }
     }
 
