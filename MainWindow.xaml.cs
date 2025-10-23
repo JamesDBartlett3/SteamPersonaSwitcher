@@ -188,8 +188,8 @@ public partial class MainWindow : Window
         _gamePersonaMappings.Add(new KeyValuePair<string, string>(processName, personaName));
         
         // Clear inputs
-        NewGameProcessTextBox.Text = "game.exe";
-        NewPersonaNameTextBox.Text = "Playing Game";
+        NewGameProcessTextBox.Text = string.Empty;
+        NewPersonaNameTextBox.Text = string.Empty;
         
         AppendStatus($"Added mapping: {processName} → {personaName}");
     }
