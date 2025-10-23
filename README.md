@@ -1,4 +1,4 @@
-# Steam Persona Changer
+# Steam Persona Switcher
 
 Automatically change your Steam profile name (persona name) based on which game you're currently playing.
 
