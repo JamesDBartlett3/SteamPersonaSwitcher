@@ -14,17 +14,21 @@ namespace SteamPersonaSwitcher;
 public partial class MainWindow : Window
 {
     private readonly SteamPersonaService _service;
-    private ObservableCollection<KeyValuePair<string, string>> _gamePersonaMappings;
+    private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
     private bool _isClosingToTray = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
     private readonly string _trayPreferencesPath;
+    private readonly CredentialManager _credentialManager;
+    private readonly SessionManager _sessionManager;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
     public MainWindow()
     {
         InitializeComponent();
+        
+        Console.WriteLine("[UI] MainWindow initializing...");
         
         // Set up AppData directory
         _configDirectory = Path.Combine(
@@ -33,19 +37,32 @@ public partial class MainWindow : Window
         _configFilePath = Path.Combine(_configDirectory, "config.yaml");
         _trayPreferencesPath = Path.Combine(_configDirectory, "tray_preferences.yaml");
         
+        Console.WriteLine($"[UI] Config directory: {_configDirectory}");
+        
         // Create directory if it doesn't exist
         if (!Directory.Exists(_configDirectory))
         {
             Directory.CreateDirectory(_configDirectory);
+            Console.WriteLine("[UI] Created config directory");
         }
+        
+        // Initialize credential manager
+        _credentialManager = new CredentialManager(_configDirectory);
+        Console.WriteLine("[UI] Credential manager initialized");
+        
+        // Initialize session manager
+        _sessionManager = new SessionManager(_configDirectory);
+        Console.WriteLine("[UI] Session manager initialized");
         
         // Get tray icon from resources
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)FindResource("TrayIcon");
         
         _service = new SteamPersonaService();
-        _gamePersonaMappings = new ObservableCollection<KeyValuePair<string, string>>();
+        _service.SetSessionManager(_sessionManager);
+        _gamePersonaMappings = new ObservableCollection<GamePersonaMapping>();
         
         GamePersonaGrid.ItemsSource = _gamePersonaMappings;
+        Console.WriteLine("[UI] Game persona grid initialized");
         
         // Subscribe to service events
         _service.StatusChanged += OnStatusChanged;
@@ -68,6 +85,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Status: {message}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] {message}");
         });
     }
@@ -76,6 +94,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Persona changed to: {personaName}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ✓ Persona changed to: {personaName}");
             
             // Show tray notification
@@ -89,6 +108,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] ERROR: {error}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {error}");
             MessageBox.Show(error, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         });
@@ -98,6 +118,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Connection state changed: {(isConnected ? "CONNECTED" : "DISCONNECTED")}");
             Title = isConnected 
                 ? "Steam Persona Switcher - Connected" 
                 : "Steam Persona Switcher - Disconnected";
@@ -106,15 +127,21 @@ public partial class MainWindow : Window
 
     private void AppendStatus(string message)
     {
-        StatusTextBox.AppendText(message + Environment.NewLine);
-        StatusTextBox.ScrollToEnd();
+        Dispatcher.Invoke(() =>
+        {
+            StatusTextBox.AppendText(message + Environment.NewLine);
+            StatusTextBox.ScrollToEnd();
+        });
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Start button clicked");
+        
         // Validate inputs
         if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
         {
+            Console.WriteLine("[UI] Validation failed: No username");
             MessageBox.Show("Please enter your Steam username.", "Validation Error", 
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -122,6 +149,7 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
+            Console.WriteLine("[UI] Validation failed: No password");
             MessageBox.Show("Please enter your Steam password.", "Validation Error", 
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -129,26 +157,61 @@ public partial class MainWindow : Window
 
         if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
         {
+            Console.WriteLine("[UI] Validation failed: Invalid interval");
             MessageBox.Show("Please enter a valid check interval (minimum 1 second).", 
                 "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
+        Console.WriteLine($"[UI] Starting with username: {UsernameTextBox.Text.Trim()}, interval: {interval}s");
+
+        var username = UsernameTextBox.Text.Trim();
+        var password = PasswordBox.Password;
+
+        // Save or delete credentials based on Remember Me checkbox
+        try
+        {
+            if (RememberMeCheckBox.IsChecked == true)
+            {
+                Console.WriteLine("[UI] Saving credentials (Remember Me is checked)");
+                _credentialManager.SaveCredentials(username, password);
+                AppendStatus("Credentials saved securely.");
+            }
+            else
+            {
+                // If Remember Me is unchecked, delete any saved credentials
+                if (_credentialManager.HasSavedCredentials())
+                {
+                    Console.WriteLine("[UI] Deleting saved credentials (Remember Me is unchecked)");
+                    _credentialManager.DeleteCredentials();
+                    AppendStatus("Saved credentials removed.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Failed to save credentials: {ex.Message}");
+            AppendStatus($"Warning: Failed to save credentials: {ex.Message}");
+        }
+
         // Create config from UI
         var config = new Config
         {
-            Username = UsernameTextBox.Text.Trim(),
-            Password = PasswordBox.Password,
+            Username = username,
+            Password = password,
             CheckIntervalSeconds = interval,
             DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
-            GamePersonaNames = _gamePersonaMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+            GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
         };
+        
+        Console.WriteLine($"[UI] Starting with {_gamePersonaMappings.Count} game mappings");
 
         // Disable controls
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = true;
         UsernameTextBox.IsEnabled = false;
         PasswordBox.IsEnabled = false;
+        RememberMeCheckBox.IsEnabled = false;
 
         AppendStatus("Starting Steam Persona Switcher...");
         
@@ -157,12 +220,42 @@ public partial class MainWindow : Window
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Stop button clicked");
+        
         StopButton.IsEnabled = false;
-        StartButton.IsEnabled = true;
-        UsernameTextBox.IsEnabled = true;
-        PasswordBox.IsEnabled = true;
+        AppendStatus("Stopping service...");
 
-        await _service.StopAsync();
+        try
+        {
+            // Stop with a timeout
+            var stopTask = _service.StopAsync();
+            var timeoutTask = Task.Delay(5000); // 5 second timeout
+            
+            var completedTask = await Task.WhenAny(stopTask, timeoutTask);
+            
+            if (completedTask == timeoutTask)
+            {
+                Console.WriteLine("[UI] Stop operation timed out");
+                AppendStatus("Warning: Stop operation timed out. The service may still be running.");
+            }
+            else
+            {
+                Console.WriteLine("[UI] Service stopped successfully");
+                AppendStatus("Service stopped.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Stop error: {ex.Message}");
+            AppendStatus($"Error stopping service: {ex.Message}");
+        }
+        finally
+        {
+            StartButton.IsEnabled = true;
+            UsernameTextBox.IsEnabled = true;
+            PasswordBox.IsEnabled = true;
+            RememberMeCheckBox.IsEnabled = true;
+        }
     }
 
     private void AddGame_Click(object sender, RoutedEventArgs e)
@@ -177,19 +270,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        Console.WriteLine($"[UI] Adding game mapping: {processName} -> {personaName}");
+
         // Check if already exists
-        if (_gamePersonaMappings.Any(kvp => kvp.Key.Equals(processName, StringComparison.OrdinalIgnoreCase)))
+        if (_gamePersonaMappings.Any(m => m.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase)))
         {
+            Console.WriteLine($"[UI] Duplicate mapping detected for {processName}");
             MessageBox.Show($"A mapping for '{processName}' already exists.", 
                 "Duplicate Entry", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        _gamePersonaMappings.Add(new KeyValuePair<string, string>(processName, personaName));
+        _gamePersonaMappings.Add(new GamePersonaMapping 
+        { 
+            ProcessName = processName, 
+            PersonaName = personaName 
+        });
+        
+        Console.WriteLine($"[UI] Game mapping added. Total mappings: {_gamePersonaMappings.Count}");
         
         // Clear inputs
-        NewGameProcessTextBox.Text = string.Empty;
-        NewPersonaNameTextBox.Text = string.Empty;
+        NewGameProcessTextBox.Text = "";
+        NewPersonaNameTextBox.Text = "";
         
         AppendStatus($"Added mapping: {processName} → {personaName}");
     }
@@ -198,10 +300,12 @@ public partial class MainWindow : Window
     {
         if (sender is Button button && button.Tag is string processName)
         {
-            var item = _gamePersonaMappings.FirstOrDefault(kvp => kvp.Key == processName);
-            if (!item.Equals(default(KeyValuePair<string, string>)))
+            Console.WriteLine($"[UI] Removing game mapping: {processName}");
+            var item = _gamePersonaMappings.FirstOrDefault(m => m.ProcessName == processName);
+            if (item != null)
             {
                 _gamePersonaMappings.Remove(item);
+                Console.WriteLine($"[UI] Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
                 AppendStatus($"Removed mapping: {processName}");
             }
         }
@@ -209,6 +313,7 @@ public partial class MainWindow : Window
 
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Save Config clicked");
         try
         {
             var config = new Config
@@ -216,8 +321,10 @@ public partial class MainWindow : Window
                 Username = UsernameTextBox.Text.Trim(),
                 CheckIntervalSeconds = int.TryParse(CheckIntervalTextBox.Text, out int interval) ? interval : 10,
                 DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
-                GamePersonaNames = _gamePersonaMappings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+                GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
             };
+            
+            Console.WriteLine($"[Config] Saving {_gamePersonaMappings.Count} game persona mappings");
 
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -242,16 +349,72 @@ public partial class MainWindow : Window
 
     private void LoadConfig_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Load Config clicked");
         LoadConfiguration();
+    }
+
+    private void ClearCredentials_Click(object sender, RoutedEventArgs e)
+    {
+        Console.WriteLine("[UI] Clear Credentials clicked");
+        try
+        {
+            if (!_credentialManager.HasSavedCredentials())
+            {
+                MessageBox.Show("No saved credentials found.", "Information",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                "Are you sure you want to delete your saved credentials?\n\n" +
+                "You will need to re-enter your username and password next time.",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                Console.WriteLine("[UI] User confirmed credential deletion");
+                _credentialManager.DeleteCredentials();
+                
+                // Also delete saved session
+                if (_sessionManager.HasSavedSession())
+                {
+                    _sessionManager.DeleteSession();
+                    AppendStatus("Saved session also deleted.");
+                }
+                
+                RememberMeCheckBox.IsChecked = false;
+                PasswordBox.Password = string.Empty;
+                AppendStatus("Saved credentials deleted.");
+                Console.WriteLine("[UI] Credentials and session deleted successfully");
+                MessageBox.Show("Saved credentials and session have been deleted.\n\nYou will need to use Steam Guard on next login.", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                Console.WriteLine("[UI] User cancelled credential deletion");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendStatus($"Failed to delete credentials: {ex.Message}");
+            MessageBox.Show($"Failed to delete credentials: {ex.Message}", "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void LoadConfiguration()
     {
         try
         {
+            Console.WriteLine("[Config] LoadConfiguration called");
             if (File.Exists(_configFilePath))
             {
+                Console.WriteLine($"[Config] Loading config from: {_configFilePath}");
                 var yaml = File.ReadAllText(_configFilePath);
+                Console.WriteLine($"[Config] YAML content length: {yaml.Length}");
+                
                 var deserializer = new DeserializerBuilder()
                     .WithNamingConvention(CamelCaseNamingConvention.Instance)
                     .Build();
@@ -259,15 +422,30 @@ public partial class MainWindow : Window
 
                 if (config != null)
                 {
+                    Console.WriteLine($"[Config] Config deserialized. GamePersonaNames count: {config.GamePersonaNames?.Count ?? 0}");
+                    
                     UsernameTextBox.Text = config.Username;
                     CheckIntervalTextBox.Text = config.CheckIntervalSeconds.ToString();
                     DefaultPersonaTextBox.Text = config.DefaultPersonaName;
 
                     _gamePersonaMappings.Clear();
-                    foreach (var kvp in config.GamePersonaNames)
+                    Console.WriteLine("[Config] Cleared existing mappings");
+                    
+                    if (config.GamePersonaNames != null)
                     {
-                        _gamePersonaMappings.Add(kvp);
+                        foreach (var kvp in config.GamePersonaNames)
+                        {
+                            Console.WriteLine($"[Config] Adding mapping: {kvp.Key} -> {kvp.Value}");
+                            _gamePersonaMappings.Add(new GamePersonaMapping
+                            {
+                                ProcessName = kvp.Key,
+                                PersonaName = kvp.Value
+                            });
+                        }
                     }
+                    
+                    Console.WriteLine($"[Config] Loaded {_gamePersonaMappings.Count} game persona mappings");
+                    Console.WriteLine($"[Config] GamePersonaGrid.Items.Count: {GamePersonaGrid.Items.Count}");
 
                     AppendStatus($"Configuration loaded from {_configFilePath}");
                 }
@@ -277,9 +455,21 @@ public partial class MainWindow : Window
                 AppendStatus($"No configuration file found at {_configFilePath}. Using default settings.");
                 
                 // Add some default game mappings
-                _gamePersonaMappings.Add(new KeyValuePair<string, string>("hl2.exe", "Playing Half-Life 2"));
-                _gamePersonaMappings.Add(new KeyValuePair<string, string>("csgo.exe", "Playing CS:GO"));
+                _gamePersonaMappings.Add(new GamePersonaMapping 
+                { 
+                    ProcessName = "hl2.exe", 
+                    PersonaName = "Playing Half-Life 2" 
+                });
+                _gamePersonaMappings.Add(new GamePersonaMapping 
+                { 
+                    ProcessName = "csgo.exe", 
+                    PersonaName = "Playing CS:GO" 
+                });
+                Console.WriteLine($"[Config] Added {_gamePersonaMappings.Count} default game persona mappings");
             }
+            
+            // Load saved credentials if they exist
+            LoadSavedCredentials();
             
             // Load tray preferences
             LoadTrayPreferences();
@@ -287,6 +477,41 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendStatus($"Failed to load config: {ex.Message}");
+        }
+    }
+
+    private void LoadSavedCredentials()
+    {
+        try
+        {
+            Console.WriteLine("[UI] Checking for saved credentials...");
+            if (_credentialManager.HasSavedCredentials())
+            {
+                Console.WriteLine("[UI] Saved credentials found, loading...");
+                var credentials = _credentialManager.LoadCredentials();
+                if (credentials.HasValue)
+                {
+                    UsernameTextBox.Text = credentials.Value.Username;
+                    PasswordBox.Password = credentials.Value.Password;
+                    RememberMeCheckBox.IsChecked = true;
+                    AppendStatus("Saved credentials loaded securely.");
+                    Console.WriteLine($"[UI] Credentials loaded for user: {credentials.Value.Username}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[UI] No saved credentials found");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Failed to load saved credentials: {ex.Message}");
+            AppendStatus($"Failed to load saved credentials: {ex.Message}");
+            MessageBox.Show(
+                $"Could not load saved credentials: {ex.Message}\n\nPlease re-enter your credentials.",
+                "Credential Load Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 
