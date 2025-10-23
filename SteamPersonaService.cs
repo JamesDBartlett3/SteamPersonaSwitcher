@@ -155,8 +155,13 @@ public class SteamPersonaService
         _isLoggedIn = false;
         ConnectionStateChanged?.Invoke(this, false);
         
-        Thread.Sleep(5000);
-        
+        // Schedule reconnection on a separate task to avoid blocking the callback thread
+        _ = HandleReconnectAsync();
+    }
+
+    private async Task HandleReconnectAsync()
+    {
+        await Task.Delay(5000);
         if (_isRunning)
         {
             RaiseStatus("Reconnecting...");
