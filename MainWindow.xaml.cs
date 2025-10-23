@@ -27,6 +27,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         
+        Console.WriteLine("[UI] MainWindow initializing...");
+        
         // Set up AppData directory
         _configDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -34,14 +36,18 @@ public partial class MainWindow : Window
         _configFilePath = Path.Combine(_configDirectory, "config.yaml");
         _trayPreferencesPath = Path.Combine(_configDirectory, "tray_preferences.yaml");
         
+        Console.WriteLine($"[UI] Config directory: {_configDirectory}");
+        
         // Create directory if it doesn't exist
         if (!Directory.Exists(_configDirectory))
         {
             Directory.CreateDirectory(_configDirectory);
+            Console.WriteLine("[UI] Created config directory");
         }
         
         // Initialize credential manager
         _credentialManager = new CredentialManager(_configDirectory);
+        Console.WriteLine("[UI] Credential manager initialized");
         
         // Get tray icon from resources
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)FindResource("TrayIcon");
@@ -72,6 +78,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Status: {message}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] {message}");
         });
     }
@@ -80,6 +87,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Persona changed to: {personaName}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ✓ Persona changed to: {personaName}");
             
             // Show tray notification
@@ -93,6 +101,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] ERROR: {error}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {error}");
             MessageBox.Show(error, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         });
@@ -102,6 +111,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            Console.WriteLine($"[UI EVENT] Connection state changed: {(isConnected ? "CONNECTED" : "DISCONNECTED")}");
             Title = isConnected 
                 ? "Steam Persona Switcher - Connected" 
                 : "Steam Persona Switcher - Disconnected";
@@ -116,9 +126,12 @@ public partial class MainWindow : Window
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Start button clicked");
+        
         // Validate inputs
         if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
         {
+            Console.WriteLine("[UI] Validation failed: No username");
             MessageBox.Show("Please enter your Steam username.", "Validation Error", 
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -126,6 +139,7 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
+            Console.WriteLine("[UI] Validation failed: No password");
             MessageBox.Show("Please enter your Steam password.", "Validation Error", 
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -133,10 +147,13 @@ public partial class MainWindow : Window
 
         if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
         {
+            Console.WriteLine("[UI] Validation failed: Invalid interval");
             MessageBox.Show("Please enter a valid check interval (minimum 1 second).", 
                 "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+
+        Console.WriteLine($"[UI] Starting with username: {UsernameTextBox.Text.Trim()}, interval: {interval}s");
 
         var username = UsernameTextBox.Text.Trim();
         var password = PasswordBox.Password;
@@ -146,6 +163,7 @@ public partial class MainWindow : Window
         {
             if (RememberMeCheckBox.IsChecked == true)
             {
+                Console.WriteLine("[UI] Saving credentials (Remember Me is checked)");
                 _credentialManager.SaveCredentials(username, password);
                 AppendStatus("Credentials saved securely.");
             }
@@ -154,6 +172,7 @@ public partial class MainWindow : Window
                 // If Remember Me is unchecked, delete any saved credentials
                 if (_credentialManager.HasSavedCredentials())
                 {
+                    Console.WriteLine("[UI] Deleting saved credentials (Remember Me is unchecked)");
                     _credentialManager.DeleteCredentials();
                     AppendStatus("Saved credentials removed.");
                 }
@@ -161,6 +180,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[UI] Failed to save credentials: {ex.Message}");
             AppendStatus($"Warning: Failed to save credentials: {ex.Message}");
         }
 
@@ -188,6 +208,8 @@ public partial class MainWindow : Window
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Stop button clicked");
+        
         StopButton.IsEnabled = false;
         StartButton.IsEnabled = true;
         UsernameTextBox.IsEnabled = true;
@@ -195,6 +217,7 @@ public partial class MainWindow : Window
         RememberMeCheckBox.IsEnabled = true;
 
         await _service.StopAsync();
+        Console.WriteLine("[UI] Service stopped");
     }
 
     private void AddGame_Click(object sender, RoutedEventArgs e)
@@ -241,6 +264,7 @@ public partial class MainWindow : Window
 
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Save Config clicked");
         try
         {
             var config = new Config
@@ -274,11 +298,13 @@ public partial class MainWindow : Window
 
     private void LoadConfig_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Load Config clicked");
         LoadConfiguration();
     }
 
     private void ClearCredentials_Click(object sender, RoutedEventArgs e)
     {
+        Console.WriteLine("[UI] Clear Credentials clicked");
         try
         {
             if (!_credentialManager.HasSavedCredentials())
@@ -297,12 +323,18 @@ public partial class MainWindow : Window
 
             if (result == MessageBoxResult.Yes)
             {
+                Console.WriteLine("[UI] User confirmed credential deletion");
                 _credentialManager.DeleteCredentials();
                 RememberMeCheckBox.IsChecked = false;
                 PasswordBox.Password = string.Empty;
                 AppendStatus("Saved credentials deleted.");
+                Console.WriteLine("[UI] Credentials deleted successfully");
                 MessageBox.Show("Saved credentials have been deleted.", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                Console.WriteLine("[UI] User cancelled credential deletion");
             }
         }
         catch (Exception ex)
@@ -365,8 +397,10 @@ public partial class MainWindow : Window
     {
         try
         {
+            Console.WriteLine("[UI] Checking for saved credentials...");
             if (_credentialManager.HasSavedCredentials())
             {
+                Console.WriteLine("[UI] Saved credentials found, loading...");
                 var credentials = _credentialManager.LoadCredentials();
                 if (credentials.HasValue)
                 {
@@ -374,11 +408,17 @@ public partial class MainWindow : Window
                     PasswordBox.Password = credentials.Value.Password;
                     RememberMeCheckBox.IsChecked = true;
                     AppendStatus("Saved credentials loaded securely.");
+                    Console.WriteLine($"[UI] Credentials loaded for user: {credentials.Value.Username}");
                 }
+            }
+            else
+            {
+                Console.WriteLine("[UI] No saved credentials found");
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[UI] Failed to load saved credentials: {ex.Message}");
             AppendStatus($"Failed to load saved credentials: {ex.Message}");
             MessageBox.Show(
                 $"Could not load saved credentials: {ex.Message}\n\nPlease re-enter your credentials.",

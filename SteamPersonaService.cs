@@ -228,7 +228,7 @@ public class SteamPersonaService
                     Username = _config.Username,
                     Password = _config.Password,
                     IsPersistentSession = false,
-                    Authenticator = new UserConsoleAuthenticator(),
+                    Authenticator = new GuiSteamAuthenticator(),
                 });
 
             // Check again before waiting for result
@@ -400,11 +400,13 @@ public class SteamPersonaService
 
     private void RaiseStatus(string message)
     {
+        Console.WriteLine($"[SERVICE] {message}");
         StatusChanged?.Invoke(this, message);
     }
 
     private void RaiseError(string message)
     {
+        Console.WriteLine($"[SERVICE ERROR] {message}");
         ErrorOccurred?.Invoke(this, message);
     }
 }
