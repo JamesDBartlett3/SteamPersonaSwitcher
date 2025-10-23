@@ -19,6 +19,7 @@ public class SteamPersonaService
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _callbackTask;
     private readonly SemaphoreSlim _authenticationLock = new SemaphoreSlim(1, 1);
+    private SessionManager? _sessionManager;
     
     private bool _isRunning = false;
     private bool _isLoggedIn = false;
@@ -36,6 +37,11 @@ public class SteamPersonaService
     public bool IsRunning => _isRunning;
     public bool IsLoggedIn => _isLoggedIn;
     public string CurrentPersonaName => _currentPersonaName;
+
+    public void SetSessionManager(SessionManager sessionManager)
+    {
+        _sessionManager = sessionManager;
+    }
 
     public Task StartAsync(Config config)
     {
@@ -221,37 +227,90 @@ public class SteamPersonaService
             RaiseStatus($"Connected to Steam! Logging in as '{_config!.Username}'...");
             ConnectionStateChanged?.Invoke(this, true);
 
-            // Use modern authentication flow with cancellation support
-            var authSession = await _steamClient!.Authentication.BeginAuthSessionViaCredentialsAsync(
-                new AuthSessionDetails
+            string? refreshToken = null;
+            
+            // Try to load existing session first
+            if (_sessionManager != null && _sessionManager.HasSavedSession())
+            {
+                try
                 {
-                    Username = _config.Username,
-                    Password = _config.Password,
-                    IsPersistentSession = false,
-                    Authenticator = new GuiSteamAuthenticator(),
-                });
-
-            // Check again before waiting for result
-            if (!_isRunning)
-            {
-                RaiseStatus("Authentication started but service is stopping.");
-                return;
+                    var session = _sessionManager.LoadSession();
+                    if (session.HasValue && session.Value.Username == _config.Username)
+                    {
+                        refreshToken = session.Value.RefreshToken;
+                        RaiseStatus("Using saved session (no Steam Guard required)...");
+                        Console.WriteLine("[SERVICE] Attempting to use saved refresh token");
+                    }
+                    else
+                    {
+                        RaiseStatus("Saved session is for different user, authenticating...");
+                        Console.WriteLine("[SERVICE] Saved session username mismatch, will re-authenticate");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    RaiseStatus($"Could not load saved session: {ex.Message}");
+                    Console.WriteLine($"[SERVICE] Session load failed: {ex.Message}");
+                }
             }
 
-            // Pass cancellation token to polling
-            var pollResponse = await authSession.PollingWaitForResultAsync(_cancellationTokenSource?.Token ?? CancellationToken.None);
-
-            // Final check before logging on
-            if (!_isRunning)
+            // If we don't have a refresh token, do full authentication
+            if (string.IsNullOrEmpty(refreshToken))
             {
-                RaiseStatus("Authentication completed but service is stopping.");
-                return;
+                RaiseStatus("Authenticating with Steam (Steam Guard may be required)...");
+                Console.WriteLine("[SERVICE] Starting full authentication flow");
+                
+                // Use modern authentication flow with cancellation support
+                var authSession = await _steamClient!.Authentication.BeginAuthSessionViaCredentialsAsync(
+                    new AuthSessionDetails
+                    {
+                        Username = _config.Username,
+                        Password = _config.Password,
+                        IsPersistentSession = false,
+                        Authenticator = new GuiSteamAuthenticator(),
+                    });
+
+                // Check again before waiting for result
+                if (!_isRunning)
+                {
+                    RaiseStatus("Authentication started but service is stopping.");
+                    return;
+                }
+
+                // Pass cancellation token to polling
+                var pollResponse = await authSession.PollingWaitForResultAsync(_cancellationTokenSource?.Token ?? CancellationToken.None);
+
+                // Final check before logging on
+                if (!_isRunning)
+                {
+                    RaiseStatus("Authentication completed but service is stopping.");
+                    return;
+                }
+
+                refreshToken = pollResponse.RefreshToken;
+                
+                // Save the session for next time
+                if (_sessionManager != null && !string.IsNullOrEmpty(refreshToken))
+                {
+                    try
+                    {
+                        _sessionManager.SaveSession(_config.Username, refreshToken);
+                        RaiseStatus("Session saved - Steam Guard won't be required next time!");
+                        Console.WriteLine("[SERVICE] Session saved successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        RaiseStatus($"Warning: Could not save session: {ex.Message}");
+                        Console.WriteLine($"[SERVICE] Failed to save session: {ex.Message}");
+                    }
+                }
             }
 
+            // Log on using the refresh token (either saved or newly obtained)
             _steamUser!.LogOn(new SteamUser.LogOnDetails
             {
-                Username = pollResponse.AccountName,
-                AccessToken = pollResponse.RefreshToken,
+                Username = _config.Username,
+                AccessToken = refreshToken,
             });
         }
         catch (TaskCanceledException)
@@ -321,6 +380,27 @@ public class SteamPersonaService
     {
         if (callback.Result != EResult.OK)
         {
+            // If the access token is invalid/expired, delete the saved session
+            if (callback.Result == EResult.InvalidPassword || 
+                callback.Result == EResult.AccessDenied ||
+                callback.Result == EResult.Expired)
+            {
+                RaiseStatus($"Saved session expired or invalid. Deleting and will retry...");
+                Console.WriteLine($"[SERVICE] Session token invalid ({callback.Result}), clearing session");
+                
+                if (_sessionManager != null && _sessionManager.HasSavedSession())
+                {
+                    try
+                    {
+                        _sessionManager.DeleteSession();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SERVICE] Failed to delete expired session: {ex.Message}");
+                    }
+                }
+            }
+            
             RaiseError($"Unable to logon to Steam: {callback.Result} / {callback.ExtendedResult}");
             _ = StopAsync();
             return;

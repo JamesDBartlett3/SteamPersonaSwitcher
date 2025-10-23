@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly string _configFilePath;
     private readonly string _trayPreferencesPath;
     private readonly CredentialManager _credentialManager;
+    private readonly SessionManager _sessionManager;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
@@ -49,10 +50,15 @@ public partial class MainWindow : Window
         _credentialManager = new CredentialManager(_configDirectory);
         Console.WriteLine("[UI] Credential manager initialized");
         
+        // Initialize session manager
+        _sessionManager = new SessionManager(_configDirectory);
+        Console.WriteLine("[UI] Session manager initialized");
+        
         // Get tray icon from resources
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)FindResource("TrayIcon");
         
         _service = new SteamPersonaService();
+        _service.SetSessionManager(_sessionManager);
         _gamePersonaMappings = new ObservableCollection<KeyValuePair<string, string>>();
         
         GamePersonaGrid.ItemsSource = _gamePersonaMappings;
@@ -325,11 +331,19 @@ public partial class MainWindow : Window
             {
                 Console.WriteLine("[UI] User confirmed credential deletion");
                 _credentialManager.DeleteCredentials();
+                
+                // Also delete saved session
+                if (_sessionManager.HasSavedSession())
+                {
+                    _sessionManager.DeleteSession();
+                    AppendStatus("Saved session also deleted.");
+                }
+                
                 RememberMeCheckBox.IsChecked = false;
                 PasswordBox.Password = string.Empty;
                 AppendStatus("Saved credentials deleted.");
-                Console.WriteLine("[UI] Credentials deleted successfully");
-                MessageBox.Show("Saved credentials have been deleted.", "Success",
+                Console.WriteLine("[UI] Credentials and session deleted successfully");
+                MessageBox.Show("Saved credentials and session have been deleted.\n\nYou will need to use Steam Guard on next login.", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
