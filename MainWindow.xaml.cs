@@ -290,8 +290,8 @@ public partial class MainWindow : Window
         Console.WriteLine($"[UI] Game mapping added. Total mappings: {_gamePersonaMappings.Count}");
         
         // Clear inputs
-        NewGameProcessTextBox.Text = "game.exe";
-        NewPersonaNameTextBox.Text = "Playing Game";
+        NewGameProcessTextBox.Text = "";
+        NewPersonaNameTextBox.Text = "";
         
         AppendStatus($"Added mapping: {processName} → {personaName}");
     }
