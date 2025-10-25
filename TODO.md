@@ -19,9 +19,9 @@
     - [ ] Smart detection of running processes likely to be games (e.g. programs running fullscreen or windowed fullscreen, high CPU/GPU usage, etc.).
   - [ ] Provide an option to scan common installation directories for games and suggest adding them to the mapping list.
 
-- [ ] Refactor separate console window into a dockable, hidden-by-default "Debug Log" panel within the main application window.
-  - [ ] Implement a toggle button to show/hide the "Debug Log" panel.
-  - [ ] Ensure the panel retains its state (visible/hidden) between application sessions.
+- [x] Refactor separate console window into a dockable, hidden-by-default "Debug Log" panel within the main application window.
+  - [x] Implement a toggle button to show/hide the "Debug Log" panel.
+  - [x] Ensure the panel retains its state (visible/hidden) between application sessions.
   
 - [ ] Set the "Clear Credentials" button to execute the deletion after a delay of 10 seconds, and during that delay, change the "Clear Credentials" button to "UNDO CLEAR CREDENTIALS (10...9...8...etc.)" in red lettering, which actually just cancels the deletion request when the user clicks it before the timer runs out.
 
