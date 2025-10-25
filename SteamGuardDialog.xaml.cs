@@ -13,7 +13,7 @@ public partial class SteamGuardDialog : Window
         MessageTextBlock.Text = message;
         CodeTextBox.Focus();
         
-        Console.WriteLine($"[AUTHENTICATOR] Showing Steam Guard dialog: {message}");
+        DebugLogger.Instance.Info($"[AUTHENTICATOR] Showing Steam Guard dialog: {message}");
     }
 
     private void OK_Click(object sender, RoutedEventArgs e)
@@ -26,15 +26,16 @@ public partial class SteamGuardDialog : Window
         }
 
         Code = CodeTextBox.Text.Trim();
-        Console.WriteLine($"[AUTHENTICATOR] User entered code: {Code}");
+        DebugLogger.Instance.Info($"[AUTHENTICATOR] User entered code: {Code}");
         DialogResult = true;
         Close();
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[AUTHENTICATOR] User cancelled Steam Guard");
+        DebugLogger.Instance.Info("[AUTHENTICATOR] User cancelled Steam Guard");
         DialogResult = false;
         Close();
     }
 }
+

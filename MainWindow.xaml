@@ -4,11 +4,11 @@
         xmlns:tb="http://www.hardcodet.net/taskbar"
         xmlns:local="clr-namespace:SteamPersonaSwitcher"
         Title="Steam Persona Switcher" 
-        SizeToContent="Height"
         Width="800"
-        MinWidth="700"
+        SizeToContent="Height"
         Icon="icon.ico"
-        Closing="Window_Closing">
+        Closing="Window_Closing"
+        ContentRendered="Window_ContentRendered">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
@@ -46,14 +46,16 @@
         </tb:TaskbarIcon>
     </Window.Resources>
 
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="240"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="150"/>
-        </Grid.RowDefinitions>
+    <Grid>
+        <!-- Main Content Area (single column - no debug panel) -->
+        <Grid Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="240"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="150"/>
+            </Grid.RowDefinitions>
 
         <!-- Settings Section -->
         <GroupBox Grid.Row="0" Header="Settings" Padding="10">
@@ -211,6 +213,8 @@
             <Button Content="Load Config" Click="LoadConfig_Click" Width="100"/>
             <Button Content="Clear Credentials" Click="ClearCredentials_Click" Width="120"
                     ToolTip="Delete saved login credentials"/>
+            <Button x:Name="DebugToggleButton" Content="Show Debug Log" Click="DebugToggle_Click" Width="120"
+                    ToolTip="Toggle debug log panel"/>
         </StackPanel>
 
         <!-- Status Log -->
@@ -223,5 +227,6 @@
                      BorderThickness="0"
                      Margin="0"/>
         </GroupBox>
+        </Grid>
     </Grid>
 </Window>

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Microsoft.Win32;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -23,6 +24,10 @@ public partial class MainWindow : Window
     private readonly string _trayPreferencesPath;
     private readonly CredentialManager _credentialManager;
     private readonly SessionManager _sessionManager;
+    private readonly DebugLogger _debugLogger;
+    private bool _isDebugPanelVisible = false;
+    private double _debugPanelWidth = 350; // Default width
+    private DebugPanelWindow? _debugPanelWindow;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
@@ -30,7 +35,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         
-        Console.WriteLine("[UI] MainWindow initializing...");
+        // Initialize debug logger
+        _debugLogger = DebugLogger.Instance;
+        
+        // Track window position and size changes to update debug panel position
+        LocationChanged += MainWindow_LocationChanged;
+        SizeChanged += MainWindow_SizeChanged;
+        
+        _debugLogger.Info("MainWindow initializing...");
         
         // Set up AppData directory
         _configDirectory = Path.Combine(
@@ -39,22 +51,22 @@ public partial class MainWindow : Window
         _configFilePath = Path.Combine(_configDirectory, "config.yaml");
         _trayPreferencesPath = Path.Combine(_configDirectory, "tray_preferences.yaml");
         
-        Console.WriteLine($"[UI] Config directory: {_configDirectory}");
+        _debugLogger.Info($"Config directory: {_configDirectory}");
         
         // Create directory if it doesn't exist
         if (!Directory.Exists(_configDirectory))
         {
             Directory.CreateDirectory(_configDirectory);
-            Console.WriteLine("[UI] Created config directory");
+            _debugLogger.Info("Created config directory");
         }
         
         // Initialize credential manager
         _credentialManager = new CredentialManager(_configDirectory);
-        Console.WriteLine("[UI] Credential manager initialized");
+        _debugLogger.Info("Credential manager initialized");
         
         // Initialize session manager
         _sessionManager = new SessionManager(_configDirectory);
-        Console.WriteLine("[UI] Session manager initialized");
+        _debugLogger.Info("Session manager initialized");
         
         // Get tray icon from resources
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)FindResource("TrayIcon");
@@ -64,7 +76,7 @@ public partial class MainWindow : Window
         _gamePersonaMappings = new ObservableCollection<GamePersonaMapping>();
         
         GamePersonaGrid.ItemsSource = _gamePersonaMappings;
-        Console.WriteLine("[UI] Game persona grid initialized");
+        _debugLogger.Info("Game persona grid initialized");
         
         // Subscribe to service events
         _service.StatusChanged += OnStatusChanged;
@@ -74,6 +86,7 @@ public partial class MainWindow : Window
         
         // Load configuration on startup
         LoadConfiguration();
+        LoadDebugPanelPreferences();
         
         // Check if should start minimized
         if (StartMinimizedCheckBox.IsChecked == true)
@@ -83,11 +96,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_ContentRendered(object? sender, EventArgs e)
+    {
+        // After content is rendered, set MinWidth to initial width and MinHeight to actual height plus buffer
+        UpdateLayout();
+        MinWidth = 800; // Set minimum width to the initial width
+        MinHeight = ActualHeight + 20; // Add 20px buffer for padding
+        SizeToContent = SizeToContent.Manual; // Disable auto-sizing after initial render
+    }
+
     private void OnStatusChanged(object? sender, string message)
     {
         Dispatcher.Invoke(() =>
         {
-            Console.WriteLine($"[UI EVENT] Status: {message}");
+            _debugLogger.Info($"Status: {message}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] {message}");
         });
     }
@@ -96,7 +118,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            Console.WriteLine($"[UI EVENT] Persona changed to: {personaName}");
+            _debugLogger.Info($"Persona changed to: {personaName}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ✓ Persona changed to: {personaName}");
             
             // Show tray notification
@@ -110,7 +132,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            Console.WriteLine($"[UI EVENT] ERROR: {error}");
+            _debugLogger.Info($"ERROR: {error}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {error}");
         });
     }
@@ -137,31 +159,31 @@ public partial class MainWindow : Window
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[UI] Start button clicked");
+        _debugLogger.Info("Start button clicked");
         
         // Validate inputs
         if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
         {
-            Console.WriteLine("[UI] Validation failed: No username");
+            _debugLogger.Info("Validation failed: No username");
             AppendStatus("⚠️ Please enter your Steam username.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
-            Console.WriteLine("[UI] Validation failed: No password");
+            _debugLogger.Info("Validation failed: No password");
             AppendStatus("⚠️ Please enter your Steam password.");
             return;
         }
 
         if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
         {
-            Console.WriteLine("[UI] Validation failed: Invalid interval");
+            _debugLogger.Info("Validation failed: Invalid interval");
             AppendStatus("⚠️ Please enter a valid check interval (minimum 1 second).");
             return;
         }
 
-        Console.WriteLine($"[UI] Starting with username: {UsernameTextBox.Text.Trim()}, interval: {interval}s");
+        _debugLogger.Info($"Starting with username: {UsernameTextBox.Text.Trim()}, interval: {interval}s");
 
         var username = UsernameTextBox.Text.Trim();
         var password = PasswordBox.Password;
@@ -171,7 +193,7 @@ public partial class MainWindow : Window
         {
             if (RememberMeCheckBox.IsChecked == true)
             {
-                Console.WriteLine("[UI] Saving credentials (Remember Me is checked)");
+                _debugLogger.Info("Saving credentials (Remember Me is checked)");
                 _credentialManager.SaveCredentials(username, password);
                 AppendStatus("Credentials saved securely.");
             }
@@ -180,7 +202,7 @@ public partial class MainWindow : Window
                 // If Remember Me is unchecked, delete any saved credentials
                 if (_credentialManager.HasSavedCredentials())
                 {
-                    Console.WriteLine("[UI] Deleting saved credentials (Remember Me is unchecked)");
+                    _debugLogger.Info("Deleting saved credentials (Remember Me is unchecked)");
                     _credentialManager.DeleteCredentials();
                     AppendStatus("Saved credentials removed.");
                 }
@@ -188,7 +210,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Failed to save credentials: {ex.Message}");
+            _debugLogger.Info($"Failed to save credentials: {ex.Message}");
             AppendStatus($"Warning: Failed to save credentials: {ex.Message}");
         }
 
@@ -202,7 +224,7 @@ public partial class MainWindow : Window
             GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
         };
         
-        Console.WriteLine($"[UI] Starting with {_gamePersonaMappings.Count} game mappings");
+        _debugLogger.Info($"Starting with {_gamePersonaMappings.Count} game mappings");
 
         // Disable controls
         StartButton.IsEnabled = false;
@@ -218,7 +240,7 @@ public partial class MainWindow : Window
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[UI] Stop button clicked");
+        _debugLogger.Info("Stop button clicked");
         
         StopButton.IsEnabled = false;
         AppendStatus("Stopping service...");
@@ -233,18 +255,18 @@ public partial class MainWindow : Window
             
             if (completedTask == timeoutTask)
             {
-                Console.WriteLine("[UI] Stop operation timed out");
+                _debugLogger.Info("Stop operation timed out");
                 AppendStatus("Warning: Stop operation timed out. The service may still be running.");
             }
             else
             {
-                Console.WriteLine("[UI] Service stopped successfully");
+                _debugLogger.Info("Service stopped successfully");
                 AppendStatus("Service stopped.");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Stop error: {ex.Message}");
+            _debugLogger.Info($"Stop error: {ex.Message}");
             AppendStatus($"Error stopping service: {ex.Message}");
         }
         finally
@@ -262,7 +284,7 @@ public partial class MainWindow : Window
         {
             // New items start as not committed - explicitly set to false
             mapping.IsCommitted = false;
-            Console.WriteLine($"[UI] Initializing new game persona mapping row - IsCommitted: {mapping.IsCommitted}, IsNotEmpty: {mapping.IsNotEmpty}, ShowRemoveButton: {mapping.ShowRemoveButton}");
+            _debugLogger.Info($"Initializing new game persona mapping row - IsCommitted: {mapping.IsCommitted}, IsNotEmpty: {mapping.IsNotEmpty}, ShowRemoveButton: {mapping.ShowRemoveButton}");
         }
     }
 
@@ -280,7 +302,7 @@ public partial class MainWindow : Window
                         if (_gamePersonaMappings.Contains(mapping))
                         {
                             _gamePersonaMappings.Remove(mapping);
-                            Console.WriteLine("[UI] Removed empty game mapping row");
+                            _debugLogger.Info("Removed empty game mapping row");
                         }
                     }), System.Windows.Threading.DispatcherPriority.Background);
                 }
@@ -318,7 +340,7 @@ public partial class MainWindow : Window
                     }
                     else
                     {
-                        Console.WriteLine($"[UI] Game mapping added/updated: {mapping.ProcessName} -> {mapping.PersonaName}");
+                        _debugLogger.Info($"Game mapping added/updated: {mapping.ProcessName} -> {mapping.PersonaName}");
                         AppendStatus($"✓ Added mapping: {mapping.ProcessName} → {mapping.PersonaName}");
                         // Mark as committed so the Remove button appears
                         mapping.IsCommitted = true;
@@ -332,16 +354,16 @@ public partial class MainWindow : Window
     {
         if (sender is Button button && button.Tag is GamePersonaMapping mapping)
         {
-            Console.WriteLine($"[UI] Removing game mapping: {mapping.ProcessName}");
+            _debugLogger.Info($"Removing game mapping: {mapping.ProcessName}");
             _gamePersonaMappings.Remove(mapping);
-            Console.WriteLine($"[UI] Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
+            _debugLogger.Info($"Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
             AppendStatus($"Removed mapping: {mapping.ProcessName}");
         }
     }
 
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[UI] Save Config clicked");
+        _debugLogger.Info("Save Config clicked");
         try
         {
             var config = new Config
@@ -352,7 +374,7 @@ public partial class MainWindow : Window
                 GamePersonaNames = _gamePersonaMappings.ToDictionary(m => m.ProcessName, m => m.PersonaName)
             };
             
-            Console.WriteLine($"[Config] Saving {_gamePersonaMappings.Count} game persona mappings");
+            _debugLogger.Info($"Saving {_gamePersonaMappings.Count} game persona mappings");
 
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -373,13 +395,13 @@ public partial class MainWindow : Window
 
     private void LoadConfig_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[UI] Load Config clicked");
+        _debugLogger.Info("Load Config clicked");
         LoadConfiguration();
     }
 
     private void ClearCredentials_Click(object sender, RoutedEventArgs e)
     {
-        Console.WriteLine("[UI] Clear Credentials clicked");
+        _debugLogger.Info("Clear Credentials clicked");
         try
         {
             if (!_credentialManager.HasSavedCredentials())
@@ -389,7 +411,7 @@ public partial class MainWindow : Window
             }
 
             AppendStatus("⚠️ Delete saved credentials? This will require re-entering username/password and Steam Guard on next login.");
-            Console.WriteLine("[UI] Deleting credentials...");
+            _debugLogger.Info("Deleting credentials...");
             
             _credentialManager.DeleteCredentials();
             
@@ -403,7 +425,7 @@ public partial class MainWindow : Window
             RememberMeCheckBox.IsChecked = false;
             PasswordBox.Password = string.Empty;
             AppendStatus("✓ Saved credentials and session deleted. Steam Guard will be required on next login.");
-            Console.WriteLine("[UI] Credentials and session deleted successfully");
+            _debugLogger.Info("Credentials and session deleted successfully");
         }
         catch (Exception ex)
         {
@@ -415,12 +437,12 @@ public partial class MainWindow : Window
     {
         try
         {
-            Console.WriteLine("[Config] LoadConfiguration called");
+            _debugLogger.Info("LoadConfiguration called");
             if (File.Exists(_configFilePath))
             {
-                Console.WriteLine($"[Config] Loading config from: {_configFilePath}");
+                _debugLogger.Info($"Loading config from: {_configFilePath}");
                 var yaml = File.ReadAllText(_configFilePath);
-                Console.WriteLine($"[Config] YAML content length: {yaml.Length}");
+                _debugLogger.Info($"YAML content length: {yaml.Length}");
                 
                 var deserializer = new DeserializerBuilder()
                     .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -429,20 +451,20 @@ public partial class MainWindow : Window
 
                 if (config != null)
                 {
-                    Console.WriteLine($"[Config] Config deserialized. GamePersonaNames count: {config.GamePersonaNames?.Count ?? 0}");
+                    _debugLogger.Info($"Config deserialized. GamePersonaNames count: {config.GamePersonaNames?.Count ?? 0}");
                     
                     UsernameTextBox.Text = config.Username;
                     CheckIntervalTextBox.Text = config.CheckIntervalSeconds.ToString();
                     DefaultPersonaTextBox.Text = config.DefaultPersonaName;
 
                     _gamePersonaMappings.Clear();
-                    Console.WriteLine("[Config] Cleared existing mappings");
+                    _debugLogger.Info("Cleared existing mappings");
                     
                     if (config.GamePersonaNames != null)
                     {
                         foreach (var kvp in config.GamePersonaNames)
                         {
-                            Console.WriteLine($"[Config] Adding mapping: {kvp.Key} -> {kvp.Value}");
+                            _debugLogger.Info($"Adding mapping: {kvp.Key} -> {kvp.Value}");
                             _gamePersonaMappings.Add(new GamePersonaMapping
                             {
                                 ProcessName = kvp.Key,
@@ -452,8 +474,8 @@ public partial class MainWindow : Window
                         }
                     }
                     
-                    Console.WriteLine($"[Config] Loaded {_gamePersonaMappings.Count} game persona mappings");
-                    Console.WriteLine($"[Config] GamePersonaGrid.Items.Count: {GamePersonaGrid.Items.Count}");
+                    _debugLogger.Info($"Loaded {_gamePersonaMappings.Count} game persona mappings");
+                    _debugLogger.Info($"GamePersonaGrid.Items.Count: {GamePersonaGrid.Items.Count}");
 
                     AppendStatus($"Configuration loaded from {_configFilePath}");
                 }
@@ -475,7 +497,7 @@ public partial class MainWindow : Window
                     PersonaName = "Playing CS:GO",
                     IsCommitted = true
                 });
-                Console.WriteLine($"[Config] Added {_gamePersonaMappings.Count} default game persona mappings");
+                _debugLogger.Info($"Added {_gamePersonaMappings.Count} default game persona mappings");
             }
             
             // Load saved credentials if they exist
@@ -494,10 +516,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            Console.WriteLine("[UI] Checking for saved credentials...");
+            _debugLogger.Info("Checking for saved credentials...");
             if (_credentialManager.HasSavedCredentials())
             {
-                Console.WriteLine("[UI] Saved credentials found, loading...");
+                _debugLogger.Info("Saved credentials found, loading...");
                 var credentials = _credentialManager.LoadCredentials();
                 if (credentials.HasValue)
                 {
@@ -505,29 +527,29 @@ public partial class MainWindow : Window
                     PasswordBox.Password = credentials.Value.Password;
                     RememberMeCheckBox.IsChecked = true;
                     AppendStatus("Saved credentials loaded securely.");
-                    Console.WriteLine($"[UI] Credentials loaded for user: {credentials.Value.Username}");
+                    _debugLogger.Info($"Credentials loaded for user: {credentials.Value.Username}");
                     
                     // Auto-start the service if enabled
                     if (AutoStartServiceCheckBox.IsChecked == true)
                     {
-                        Console.WriteLine("[UI] Auto-starting service with saved credentials...");
+                        _debugLogger.Info("Auto-starting service with saved credentials...");
                         AppendStatus("🚀 Auto-starting service with saved credentials...");
                         await AutoStartService();
                     }
                     else
                     {
-                        Console.WriteLine("[UI] Auto-start disabled in settings");
+                        _debugLogger.Info("Auto-start disabled in settings");
                     }
                 }
             }
             else
             {
-                Console.WriteLine("[UI] No saved credentials found");
+                _debugLogger.Info("No saved credentials found");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Failed to load saved credentials: {ex.Message}");
+            _debugLogger.Info($"Failed to load saved credentials: {ex.Message}");
             AppendStatus($"⚠️ Could not load saved credentials: {ex.Message}. Please re-enter your credentials.");
         }
     }
@@ -540,13 +562,13 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(UsernameTextBox.Text) || 
                 string.IsNullOrWhiteSpace(PasswordBox.Password))
             {
-                Console.WriteLine("[UI] Auto-start skipped: Missing credentials");
+                _debugLogger.Info("Auto-start skipped: Missing credentials");
                 return;
             }
 
             if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
             {
-                Console.WriteLine("[UI] Auto-start skipped: Invalid interval, using default 5 seconds");
+                _debugLogger.Info("Auto-start skipped: Invalid interval, using default 5 seconds");
                 CheckIntervalTextBox.Text = "5";
                 interval = 5;
             }
@@ -575,12 +597,12 @@ public partial class MainWindow : Window
             RememberMeCheckBox.IsEnabled = false;
 
             // Start the service
-            Console.WriteLine($"[UI] Auto-starting service for user: {username}");
+            _debugLogger.Info($"Auto-starting service for user: {username}");
             await _service.StartAsync(config);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Auto-start failed: {ex.Message}");
+            _debugLogger.Info($"Auto-start failed: {ex.Message}");
             AppendStatus($"❌ Auto-start failed: {ex.Message}");
             
             // Reset button states on error
@@ -682,14 +704,14 @@ public partial class MainWindow : Window
                 e.Cancel = true; // Cancel the first close attempt
                 _isShuttingDown = true;
                 
-                Console.WriteLine("[UI] Window closing, stopping service...");
+                _debugLogger.Info("Window closing, stopping service...");
                 
                 // Stop service asynchronously
                 await _service.StopAsync();
                 
                 _trayIcon?.Dispose();
                 
-                Console.WriteLine("[UI] Service stopped, closing application");
+                _debugLogger.Info("Service stopped, closing application");
                 
                 // Now actually close
                 Application.Current.Shutdown();
@@ -737,7 +759,7 @@ public partial class MainWindow : Window
                 if (!string.IsNullOrEmpty(exePath))
                 {
                     runKey.SetValue(appName, $"\"{exePath}\"");
-                    Console.WriteLine($"[UI] Added to Windows startup: {exePath}");
+                    _debugLogger.Info($"Added to Windows startup: {exePath}");
                     AppendStatus("✓ App will run when Windows starts.");
                 }
             }
@@ -747,7 +769,7 @@ public partial class MainWindow : Window
                 if (runKey.GetValue(appName) != null)
                 {
                     runKey.DeleteValue(appName);
-                    Console.WriteLine("[UI] Removed from Windows startup");
+                    _debugLogger.Info("Removed from Windows startup");
                     AppendStatus("✓ App removed from Windows startup.");
                 }
             }
@@ -756,7 +778,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Failed to update startup setting: {ex.Message}");
+            _debugLogger.Info($"Failed to update startup setting: {ex.Message}");
             AppendStatus($"❌ Failed to update startup setting: {ex.Message}");
         }
     }
@@ -775,13 +797,144 @@ public partial class MainWindow : Window
                 
                 if (value != null)
                 {
-                    Console.WriteLine("[UI] App is set to run at Windows startup");
+                    _debugLogger.Info("App is set to run at Windows startup");
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[UI] Failed to check startup setting: {ex.Message}");
+            _debugLogger.Info($"Failed to check startup setting: {ex.Message}");
+        }
+    }
+
+    // Debug Panel Event Handlers
+    private void DebugToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _isDebugPanelVisible = !_isDebugPanelVisible;
+        
+        if (_isDebugPanelVisible)
+        {
+            ShowDebugPanel();
+        }
+        else
+        {
+            HideDebugPanel();
+        }
+        
+        // Update button text
+        DebugToggleButton.Content = _isDebugPanelVisible ? "Hide Debug Log" : "Show Debug Log";
+        
+        SaveDebugPanelPreferences();
+    }
+
+    private void ShowDebugPanel()
+    {
+        if (_debugPanelWindow == null)
+        {
+            _debugPanelWindow = new DebugPanelWindow
+            {
+                Owner = this,
+                Width = _debugPanelWidth
+            };
+        }
+        
+        _debugPanelWindow.Show();
+        _debugPanelWindow.UpdatePosition();
+        _debugLogger.Info("Debug panel opened");
+    }
+
+    private void HideDebugPanel()
+    {
+        if (_debugPanelWindow != null)
+        {
+            // Save current width before hiding
+            _debugPanelWidth = _debugPanelWindow.Width;
+            _debugPanelWindow.Hide();
+        }
+        _debugLogger.Info("Debug panel closed");
+    }
+
+    public void OnDebugPanelClosed()
+    {
+        _isDebugPanelVisible = false;
+        DebugToggleButton.Content = "Show Debug Log";
+        SaveDebugPanelPreferences();
+    }
+
+    private void MainWindow_LocationChanged(object? sender, EventArgs e)
+    {
+        _debugPanelWindow?.UpdatePosition();
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _debugPanelWindow?.UpdatePosition();
+    }
+
+    private void SaveDebugPanelPreferences()
+    {
+        try
+        {
+            var preferences = new
+            {
+                IsDebugPanelVisible = _isDebugPanelVisible,
+                DebugPanelWidth = _debugPanelWidth
+            };
+
+            var serializer = new SerializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .Build();
+            
+            var yaml = serializer.Serialize(preferences);
+            var debugPrefsPath = Path.Combine(_configDirectory, "debug_preferences.yaml");
+            File.WriteAllText(debugPrefsPath, yaml);
+        }
+        catch (Exception ex)
+        {
+            _debugLogger.Error($"Failed to save debug panel preferences: {ex.Message}");
+        }
+    }
+
+    private void LoadDebugPanelPreferences()
+    {
+        try
+        {
+            var debugPrefsPath = Path.Combine(_configDirectory, "debug_preferences.yaml");
+            if (File.Exists(debugPrefsPath))
+            {
+                var yaml = File.ReadAllText(debugPrefsPath);
+                var deserializer = new DeserializerBuilder()
+                    .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                    .Build();
+                
+                var preferences = deserializer.Deserialize<Dictionary<string, object>>(yaml);
+                
+                if (preferences.TryGetValue("isDebugPanelVisible", out var visible))
+                {
+                    _isDebugPanelVisible = Convert.ToBoolean(visible);
+                }
+                
+                if (preferences.TryGetValue("debugPanelWidth", out var width))
+                {
+                    _debugPanelWidth = Convert.ToDouble(width);
+                }
+
+                // Apply visibility preference on startup
+                if (_isDebugPanelVisible)
+                {
+                    ShowDebugPanel();
+                }
+
+                // Update button text to match state
+                DebugToggleButton.Content = _isDebugPanelVisible ? "Hide Debug Log" : "Show Debug Log";
+
+                _debugLogger.Info($"Debug panel preferences loaded (Visible: {_isDebugPanelVisible}, Width: {_debugPanelWidth})");
+            }
+        }
+        catch (Exception ex)
+        {
+            _debugLogger.Warning($"Failed to load debug panel preferences: {ex.Message}");
         }
     }
 }
+
