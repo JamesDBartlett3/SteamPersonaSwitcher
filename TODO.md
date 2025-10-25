@@ -1,9 +1,9 @@
 # Bug Fixes
 
-- [ ] "Remove" button on blank/new game-persona mapping entry should not be there. It should only appear on existing entries.
-- [ ] Text in input fields should be left-aligned and vertically centered for better readability.
-- [ ] The first row in the grid is either missing its top border, or the border is hidden under the header. Ensure consistent border rendering for all rows.
-- [ ] While in the process of creating a new game-persona mapping, the new entry's row height is inconsistent with existing rows. Ensure uniform row height across all entries.
+- [x] "Remove" button on blank/new game-persona mapping entry should not be there. It should only appear on existing entries.
+- [x] Text in input fields should be left-aligned and vertically centered for better readability.
+- [x] The first row in the grid is either missing its top border, or the border is hidden under the header. Ensure consistent border rendering for all rows.
+- [x] While in the process of creating a new game-persona mapping, the new entry's row height is inconsistent with existing rows. Ensure uniform row height across all entries.
 
 # Enhancements
 
@@ -35,7 +35,9 @@
 - [ ] Update documentation to reflect new UI changes and auto-save feature.
 
 s
+
 # Tests to Perform
+
 - [ ] Verify that the "Remove" button only appears on existing entries and not on blank/new entries.
 - [ ] Verify that text in input fields is left-aligned and vertically centered.
 - [ ] Verify that the row heights are consistent across all entries, including new entries being created.
@@ -43,7 +45,7 @@ s
 - [ ] Verify that the "Clear Credentials" button behaves as expected, including the countdown and cancellation functionality.
 - [ ] Test running the application as a Windows Service, including starting/stopping the service via the GUI and ensuring the service continues running after quitting the GUI.
 - [ ] Test minimize to tray, close to tray, and restore from tray.
-- [ ] Test startup behavior. Does it start minimized to tray if that setting is enabled? Does it start on system startup if that setting is enabled? 
+- [ ] Test startup behavior. Does it start minimized to tray if that setting is enabled? Does it start on system startup if that setting is enabled?
 - [ ] Test auto-save functionality for game-persona mapping list changes.
 - [ ] Test the "Debug Log" panel for proper toggling and state retention between sessions.
 - [ ] Test the persona field's autocomplete functionality for existing personas.

@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:tb="http://www.hardcodet.net/taskbar"
+        xmlns:local="clr-namespace:SteamPersonaSwitcher"
         Title="Steam Persona Switcher" 
         SizeToContent="Height"
         Width="800"
@@ -10,6 +11,7 @@
         Closing="Window_Closing">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
         
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -108,25 +110,92 @@
                       SelectionMode="Single"
                       HeadersVisibility="Column"
                       GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="#AAAAAA"
+                      VerticalGridLinesBrush="#AAAAAA"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Auto"
+                      RowHeight="32"
                       InitializingNewItem="GamePersonaGrid_InitializingNewItem"
                       RowEditEnding="GamePersonaGrid_RowEditEnding">
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Padding" Value="5,3,5,5"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        <Setter Property="BorderBrush" Value="Black"/>
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+                <DataGrid.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="Padding" Value="5,0"/>
+                    </Style>
+                </DataGrid.CellStyle>
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Game Process Name (e.g., game.exe)" 
                                       Binding="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}" 
                                       Width="2*"
-                                      IsReadOnly="False"/>
+                                      IsReadOnly="False">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                <Setter Property="Padding" Value="5,0"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Padding" Value="5,0"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Persona Name" 
                                       Binding="{Binding PersonaName, UpdateSourceTrigger=PropertyChanged}" 
                                       Width="2*"
-                                      IsReadOnly="False"/>
-                    <DataGridTemplateColumn Header="Actions" Width="Auto">
+                                      IsReadOnly="False">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                <Setter Property="Padding" Value="5,0"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Padding" Value="5,0"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Actions" Width="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Button Content="Remove" Click="RemoveGame_Click" 
                                         Tag="{Binding}"
-                                        Visibility="{Binding IsCommitted, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"
+                                        MinWidth="70"
+                                        Padding="5,2">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding ProcessName, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
+                                                        <Condition Binding="{Binding PersonaName, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
+                                                        <Condition Binding="{Binding IsCommitted}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

@@ -21,6 +21,7 @@ public class GamePersonaMapping : INotifyPropertyChanged
                 _processName = value;
                 OnPropertyChanged(nameof(ProcessName));
                 OnPropertyChanged(nameof(IsNotEmpty));
+                OnPropertyChanged(nameof(ShowRemoveButton));
             }
         }
     }
@@ -35,6 +36,7 @@ public class GamePersonaMapping : INotifyPropertyChanged
                 _personaName = value;
                 OnPropertyChanged(nameof(PersonaName));
                 OnPropertyChanged(nameof(IsNotEmpty));
+                OnPropertyChanged(nameof(ShowRemoveButton));
             }
         }
     }
@@ -56,9 +58,15 @@ public class GamePersonaMapping : INotifyPropertyChanged
             {
                 _isCommitted = value;
                 OnPropertyChanged(nameof(IsCommitted));
+                OnPropertyChanged(nameof(ShowRemoveButton));
             }
         }
     }
+
+    /// <summary>
+    /// Returns true if the Remove button should be visible (committed AND not empty)
+    /// </summary>
+    public bool ShowRemoveButton => _isCommitted && IsNotEmpty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
