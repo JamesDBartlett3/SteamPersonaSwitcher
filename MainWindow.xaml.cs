@@ -260,9 +260,9 @@ public partial class MainWindow : Window
     {
         if (e.NewItem is GamePersonaMapping mapping)
         {
-            // New items start as not committed
+            // New items start as not committed - explicitly set to false
             mapping.IsCommitted = false;
-            Console.WriteLine("[UI] Initializing new game persona mapping row");
+            Console.WriteLine($"[UI] Initializing new game persona mapping row - IsCommitted: {mapping.IsCommitted}, IsNotEmpty: {mapping.IsNotEmpty}, ShowRemoveButton: {mapping.ShowRemoveButton}");
         }
     }
 
