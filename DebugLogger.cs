@@ -105,14 +105,12 @@ public class DebugLogger
         {
             if (Application.Current?.Dispatcher == null || !Application.Current.Dispatcher.CheckAccess())
             {
-                // Not on UI thread or app not initialized, just write to console
-                Console.WriteLine($"[{level}] {message}");
+                // Not on UI thread or app not initialized, queue for later
                 return;
             }
         }
         catch
         {
-            Console.WriteLine($"[{level}] {message}");
             return;
         }
 
@@ -134,9 +132,6 @@ public class DebugLogger
             {
                 _logEntries.RemoveAt(0);
             }
-
-            // Also write to console for debugging during development
-            Console.WriteLine($"[{entry.Timestamp}] {entry.Icon} {entry.Level}: {entry.Message}");
         });
     }
 

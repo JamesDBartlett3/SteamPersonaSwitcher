@@ -8,7 +8,10 @@
 # Enhancements
 
 - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
+
   - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
+  - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
+
 - [ ] Streamline adding game exe names to game-persona mapping list:
 
   - [ ] Persona field should allow user to type in a custom persona name or select from a dropdown of existing personas.
@@ -20,8 +23,10 @@
   - [ ] Provide an option to scan common installation directories for games and suggest adding them to the mapping list.
 
 - [x] Refactor separate console window into a dockable, hidden-by-default "Debug Log" panel within the main application window.
+
   - [x] Implement a toggle button to show/hide the "Debug Log" panel.
   - [x] Ensure the panel retains its state (visible/hidden) between application sessions.
+
 - [ ] Set the "Clear Credentials" button to execute the deletion after a delay of 10 seconds, and during that delay, change the "Clear Credentials" button to "UNDO CLEAR CREDENTIALS (10...9...8...etc.)" in red lettering, which actually just cancels the deletion request when the user clicks it before the timer runs out.
 
 - [ ] Add option to run as a Windows Service for headless operation.
@@ -40,10 +45,8 @@
 
 # Cleanup Tasks
 
-- [ ] Find any unused code related to the old console view or pop-up dialogs and mark it as deprecated for future removal.
-- [ ] Update documentation to reflect new UI changes and auto-save feature.
-
-s
+- [x] Find any unused code related to the old console view or pop-up dialogs and mark it as deprecated for future removal.
+- [x] Update documentation to reflect new UI changes and auto-save feature.
 
 # Tests to Perform
 

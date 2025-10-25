@@ -1,3 +1,11 @@
+/*
+ * DEPRECATED: This file contains the old console-based version of the application.
+ * It has been replaced by the WPF GUI version (MainWindow.xaml/xaml.cs).
+ * The console window has been replaced by the Debug Log panel.
+ * This file is kept for reference only and should not be used.
+ * Marked as deprecated on: 2025-10-25
+ */
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
