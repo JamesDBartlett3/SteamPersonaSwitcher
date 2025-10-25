@@ -37,7 +37,7 @@ public class SessionManager
 
             // Save encrypted data to file
             File.WriteAllBytes(_sessionFilePath, encryptedData);
-            Console.WriteLine($"[SESSION] Session saved for user: {username}");
+            DebugLogger.Instance.Info($"[SESSION] Session saved for user: {username}");
         }
         catch (Exception ex)
         {
@@ -54,7 +54,7 @@ public class SessionManager
         {
             if (!File.Exists(_sessionFilePath))
             {
-                Console.WriteLine("[SESSION] No saved session found");
+                DebugLogger.Instance.Info("[SESSION] No saved session found");
                 return null;
             }
 
@@ -75,18 +75,18 @@ public class SessionManager
                 throw new Exception("Invalid session format");
             }
 
-            Console.WriteLine($"[SESSION] Loaded session for user: {parts[0]}");
+            DebugLogger.Instance.Info($"[SESSION] Loaded session for user: {parts[0]}");
             return (parts[0], parts[1]);
         }
         catch (CryptographicException)
         {
             // Data was encrypted by a different user or machine
-            Console.WriteLine("[SESSION] Cannot decrypt session - may be from different user");
+            DebugLogger.Instance.Info("[SESSION] Cannot decrypt session - may be from different user");
             throw new Exception("Cannot decrypt session. It may have been saved by a different user.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSION] Failed to load session: {ex.Message}");
+            DebugLogger.Instance.Info($"[SESSION] Failed to load session: {ex.Message}");
             throw new Exception($"Failed to load session: {ex.Message}", ex);
         }
     }
@@ -101,7 +101,7 @@ public class SessionManager
             if (File.Exists(_sessionFilePath))
             {
                 File.Delete(_sessionFilePath);
-                Console.WriteLine("[SESSION] Session deleted");
+                DebugLogger.Instance.Info("[SESSION] Session deleted");
             }
         }
         catch (Exception ex)
@@ -118,3 +118,4 @@ public class SessionManager
         return File.Exists(_sessionFilePath);
     }
 }
+
