@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly SteamPersonaService _service;
     private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
     private bool _isClosingToTray = false;
+    private bool _isShuttingDown = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
     private readonly string _trayPreferencesPath;
@@ -110,7 +111,6 @@ public partial class MainWindow : Window
         {
             Console.WriteLine($"[UI EVENT] ERROR: {error}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {error}");
-            MessageBox.Show(error, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         });
     }
 
@@ -142,24 +142,21 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
         {
             Console.WriteLine("[UI] Validation failed: No username");
-            MessageBox.Show("Please enter your Steam username.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter your Steam username.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
             Console.WriteLine("[UI] Validation failed: No password");
-            MessageBox.Show("Please enter your Steam password.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter your Steam password.");
             return;
         }
 
         if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
         {
             Console.WriteLine("[UI] Validation failed: Invalid interval");
-            MessageBox.Show("Please enter a valid check interval (minimum 1 second).", 
-                "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter a valid check interval (minimum 1 second).");
             return;
         }
 
@@ -265,8 +262,7 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(processName) || string.IsNullOrWhiteSpace(personaName))
         {
-            MessageBox.Show("Please enter both process name and persona name.", 
-                "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter both process name and persona name.");
             return;
         }
 
@@ -276,8 +272,7 @@ public partial class MainWindow : Window
         if (_gamePersonaMappings.Any(m => m.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase)))
         {
             Console.WriteLine($"[UI] Duplicate mapping detected for {processName}");
-            MessageBox.Show($"A mapping for '{processName}' already exists.", 
-                "Duplicate Entry", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus($"⚠️ A mapping for '{processName}' already exists.");
             return;
         }
 
@@ -335,15 +330,11 @@ public partial class MainWindow : Window
             // Save tray preferences
             SaveTrayPreferences();
             
-            AppendStatus($"Configuration saved to {_configFilePath}");
-            MessageBox.Show($"Configuration saved successfully!\n\nLocation: {_configFilePath}", "Success", 
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            AppendStatus($"✓ Configuration saved successfully to {_configFilePath}");
         }
         catch (Exception ex)
         {
-            AppendStatus($"Failed to save config: {ex.Message}");
-            MessageBox.Show($"Failed to save configuration: {ex.Message}", "Error", 
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            AppendStatus($"❌ Failed to save config: {ex.Message}");
         }
     }
 
@@ -360,47 +351,30 @@ public partial class MainWindow : Window
         {
             if (!_credentialManager.HasSavedCredentials())
             {
-                MessageBox.Show("No saved credentials found.", "Information",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                AppendStatus("ℹ️ No saved credentials found.");
                 return;
             }
 
-            var result = MessageBox.Show(
-                "Are you sure you want to delete your saved credentials?\n\n" +
-                "You will need to re-enter your username and password next time.",
-                "Confirm Delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
+            AppendStatus("⚠️ Delete saved credentials? This will require re-entering username/password and Steam Guard on next login.");
+            Console.WriteLine("[UI] Deleting credentials...");
+            
+            _credentialManager.DeleteCredentials();
+            
+            // Also delete saved session
+            if (_sessionManager.HasSavedSession())
             {
-                Console.WriteLine("[UI] User confirmed credential deletion");
-                _credentialManager.DeleteCredentials();
-                
-                // Also delete saved session
-                if (_sessionManager.HasSavedSession())
-                {
-                    _sessionManager.DeleteSession();
-                    AppendStatus("Saved session also deleted.");
-                }
-                
-                RememberMeCheckBox.IsChecked = false;
-                PasswordBox.Password = string.Empty;
-                AppendStatus("Saved credentials deleted.");
-                Console.WriteLine("[UI] Credentials and session deleted successfully");
-                MessageBox.Show("Saved credentials and session have been deleted.\n\nYou will need to use Steam Guard on next login.", "Success",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                _sessionManager.DeleteSession();
+                AppendStatus("Saved session also deleted.");
             }
-            else
-            {
-                Console.WriteLine("[UI] User cancelled credential deletion");
-            }
+            
+            RememberMeCheckBox.IsChecked = false;
+            PasswordBox.Password = string.Empty;
+            AppendStatus("✓ Saved credentials and session deleted. Steam Guard will be required on next login.");
+            Console.WriteLine("[UI] Credentials and session deleted successfully");
         }
         catch (Exception ex)
         {
-            AppendStatus($"Failed to delete credentials: {ex.Message}");
-            MessageBox.Show($"Failed to delete credentials: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            AppendStatus($"❌ Failed to delete credentials: {ex.Message}");
         }
     }
 
@@ -506,12 +480,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Console.WriteLine($"[UI] Failed to load saved credentials: {ex.Message}");
-            AppendStatus($"Failed to load saved credentials: {ex.Message}");
-            MessageBox.Show(
-                $"Could not load saved credentials: {ex.Message}\n\nPlease re-enter your credentials.",
-                "Credential Load Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            AppendStatus($"⚠️ Could not load saved credentials: {ex.Message}. Please re-enter your credentials.");
         }
     }
 
@@ -580,7 +549,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Window_Closing(object sender, CancelEventArgs e)
+    private async void Window_Closing(object sender, CancelEventArgs e)
     {
         if (CloseToTrayCheckBox.IsChecked == true && !_isClosingToTray)
         {
@@ -593,9 +562,24 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Actually closing - cleanup
-            _service.StopAsync().Wait();
-            _trayIcon?.Dispose();
+            // Actually closing - cleanup asynchronously to avoid UI freeze
+            if (!_isShuttingDown)
+            {
+                e.Cancel = true; // Cancel the first close attempt
+                _isShuttingDown = true;
+                
+                Console.WriteLine("[UI] Window closing, stopping service...");
+                
+                // Stop service asynchronously
+                await _service.StopAsync();
+                
+                _trayIcon?.Dispose();
+                
+                Console.WriteLine("[UI] Service stopped, closing application");
+                
+                // Now actually close
+                Application.Current.Shutdown();
+            }
         }
     }
 
