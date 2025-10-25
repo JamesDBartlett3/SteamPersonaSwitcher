@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Debug Log"
         Width="350"
-        MinWidth="200"
+        MinWidth="470"
         MaxWidth="800"
         SizeToContent="Height"
         WindowStyle="None"

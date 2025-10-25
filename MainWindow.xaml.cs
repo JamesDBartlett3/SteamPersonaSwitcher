@@ -96,6 +96,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_ContentRendered(object? sender, EventArgs e)
+    {
+        // After content is rendered, set MinWidth to initial width and MinHeight to actual height plus buffer
+        UpdateLayout();
+        MinWidth = 800; // Set minimum width to the initial width
+        MinHeight = ActualHeight + 20; // Add 20px buffer for padding
+        SizeToContent = SizeToContent.Manual; // Disable auto-sizing after initial render
+    }
+
     private void OnStatusChanged(object? sender, string message)
     {
         Dispatcher.Invoke(() =>

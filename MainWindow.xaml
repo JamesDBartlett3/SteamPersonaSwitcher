@@ -5,11 +5,10 @@
         xmlns:local="clr-namespace:SteamPersonaSwitcher"
         Title="Steam Persona Switcher" 
         Width="800"
-        Height="700"
-        MinWidth="800"
-        MinHeight="700"
+        SizeToContent="Height"
         Icon="icon.ico"
-        Closing="Window_Closing">
+        Closing="Window_Closing"
+        ContentRendered="Window_ContentRendered">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
