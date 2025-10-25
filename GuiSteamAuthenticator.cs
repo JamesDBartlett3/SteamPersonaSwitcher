@@ -1,80 +1,46 @@
 using System;
 using System.Threading.Tasks;
-using System.Windows;
 using SteamKit2.Authentication;
 
 namespace SteamPersonaSwitcher;
 
 /// <summary>
-/// Custom Steam authenticator that shows prompts in the GUI instead of console
+/// Custom Steam authenticator that logs messages to console instead of showing GUI prompts
+/// Since we're using persistent sessions, authentication should rarely be needed
 /// </summary>
 public class GuiSteamAuthenticator : IAuthenticator
 {
     public Task<string> GetDeviceCodeAsync(bool previousCodeWasIncorrect)
     {
-        var tcs = new TaskCompletionSource<string>();
+        var message = previousCodeWasIncorrect
+            ? "⚠️ Previous code was incorrect. Please check your Steam Mobile App for the new code."
+            : "🔐 Steam Guard required: Please open your Steam Mobile App and enter the code shown.";
         
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            var message = previousCodeWasIncorrect
-                ? "The previous code was incorrect. Please enter your Steam Guard code:"
-                : "Please enter your Steam Guard code from the Steam Mobile App:";
-            
-            var dialog = new SteamGuardDialog(message);
-            if (dialog.ShowDialog() == true)
-            {
-                tcs.SetResult(dialog.Code);
-            }
-            else
-            {
-                tcs.SetCanceled();
-            }
-        });
+        Console.WriteLine($"[STEAM GUARD] {message}");
         
-        return tcs.Task;
+        // Return empty string - this will fail authentication and trigger the persistent session to be cleared
+        // User will need to re-authenticate properly next time
+        return Task.FromResult(string.Empty);
     }
 
     public Task<string> GetEmailCodeAsync(string email, bool previousCodeWasIncorrect)
     {
-        var tcs = new TaskCompletionSource<string>();
+        var message = previousCodeWasIncorrect
+            ? $"⚠️ Previous code was incorrect. Please check your email ({email}) for a new code."
+            : $"📧 Steam Guard code sent to {email}. Please check your email and enter the code.";
         
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            var message = previousCodeWasIncorrect
-                ? $"The previous code was incorrect. Please enter the code sent to {email}:"
-                : $"Please enter the code sent to {email}:";
-            
-            var dialog = new SteamGuardDialog(message);
-            if (dialog.ShowDialog() == true)
-            {
-                tcs.SetResult(dialog.Code);
-            }
-            else
-            {
-                tcs.SetCanceled();
-            }
-        });
+        Console.WriteLine($"[STEAM GUARD] {message}");
         
-        return tcs.Task;
+        // Return empty string - this will fail authentication and trigger retry
+        return Task.FromResult(string.Empty);
     }
 
     public Task<bool> AcceptDeviceConfirmationAsync()
     {
-        var tcs = new TaskCompletionSource<bool>();
+        Console.WriteLine("[STEAM GUARD] 📱 Please confirm this login in your Steam Mobile App.");
+        Console.WriteLine("[STEAM GUARD] Waiting for mobile confirmation...");
         
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            var result = MessageBox.Show(
-                "Please confirm this login in the Steam Mobile App.\n\n" +
-                "Click OK after you've approved it, or Cancel to abort.",
-                "Steam Guard - Mobile Confirmation Required",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Information);
-            
-            Console.WriteLine("[AUTHENTICATOR] Waiting for mobile confirmation...");
-            tcs.SetResult(result == MessageBoxResult.OK);
-        });
-        
-        return tcs.Task;
+        // Return true to indicate we're waiting - Steam will poll for confirmation
+        return Task.FromResult(true);
     }
 }

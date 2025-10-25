@@ -9,6 +9,8 @@
         Icon="icon.ico"
         Closing="Window_Closing">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="5"/>
@@ -86,9 +88,11 @@
             </Grid>
         </GroupBox>
 
-        <!-- Tray Options -->
-        <GroupBox Grid.Row="1" Header="Tray Options" Padding="10">
+        <!-- Startup & Tray Options -->
+        <GroupBox Grid.Row="1" Header="Startup &amp; Tray Options" Padding="10">
             <StackPanel>
+                <CheckBox x:Name="RunAtStartupCheckBox" Content="Run when Windows starts" Checked="RunAtStartup_Changed" Unchecked="RunAtStartup_Changed"/>
+                <CheckBox x:Name="AutoStartServiceCheckBox" Content="Automatically start service on launch" IsChecked="True"/>
                 <CheckBox x:Name="StartMinimizedCheckBox" Content="Start minimized to tray"/>
                 <CheckBox x:Name="MinimizeToTrayCheckBox" Content="Minimize to tray instead of taskbar"/>
                 <CheckBox x:Name="CloseToTrayCheckBox" Content="Minimize to tray on close (instead of exiting)" IsChecked="True"/>
@@ -97,52 +101,37 @@
 
         <!-- Game Persona Mappings -->
         <GroupBox Grid.Row="2" Header="Game Persona Names" Padding="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <DataGrid Grid.Row="0" x:Name="GamePersonaGrid" 
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          SelectionMode="Single"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="All"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto"
-                          Margin="0,0,0,5">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Game Process Name (e.g., game.exe)" 
-                                          Binding="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}" 
-                                          Width="2*"
-                                          IsReadOnly="False"/>
-                        <DataGridTextColumn Header="Persona Name" 
-                                          Binding="{Binding PersonaName, UpdateSourceTrigger=PropertyChanged}" 
-                                          Width="2*"
-                                          IsReadOnly="False"/>
-                        <DataGridTemplateColumn Width="Auto">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Button Content="Remove" Click="RemoveGame_Click" 
-                                            Tag="{Binding ProcessName}"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
-
-                <StackPanel Grid.Row="1" Orientation="Horizontal">
-                    <TextBox x:Name="NewGameProcessTextBox" Width="250" 
-                             Margin="5" Padding="5"
-                             Text="game.exe"/>
-                    <TextBox x:Name="NewPersonaNameTextBox" Width="250" 
-                             Margin="5" Padding="5"
-                             Text="Playing Game"/>
-                    <Button Content="Add Game" Click="AddGame_Click"/>
-                </StackPanel>
-            </Grid>
+            <DataGrid x:Name="GamePersonaGrid" 
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="True"
+                      CanUserDeleteRows="False"
+                      SelectionMode="Single"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="All"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Auto"
+                      InitializingNewItem="GamePersonaGrid_InitializingNewItem"
+                      RowEditEnding="GamePersonaGrid_RowEditEnding">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Game Process Name (e.g., game.exe)" 
+                                      Binding="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}" 
+                                      Width="2*"
+                                      IsReadOnly="False"/>
+                    <DataGridTextColumn Header="Persona Name" 
+                                      Binding="{Binding PersonaName, UpdateSourceTrigger=PropertyChanged}" 
+                                      Width="2*"
+                                      IsReadOnly="False"/>
+                    <DataGridTemplateColumn Header="Actions" Width="Auto">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Remove" Click="RemoveGame_Click" 
+                                        Tag="{Binding}"
+                                        Visibility="{Binding IsCommitted, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
         </GroupBox>
 
         <!-- Control Buttons -->

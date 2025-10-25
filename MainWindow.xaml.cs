@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
     private readonly SteamPersonaService _service;
     private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
     private bool _isClosingToTray = false;
+    private bool _isShuttingDown = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
     private readonly string _trayPreferencesPath;
@@ -110,7 +112,6 @@ public partial class MainWindow : Window
         {
             Console.WriteLine($"[UI EVENT] ERROR: {error}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {error}");
-            MessageBox.Show(error, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         });
     }
 
@@ -142,24 +143,21 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
         {
             Console.WriteLine("[UI] Validation failed: No username");
-            MessageBox.Show("Please enter your Steam username.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter your Steam username.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(PasswordBox.Password))
         {
             Console.WriteLine("[UI] Validation failed: No password");
-            MessageBox.Show("Please enter your Steam password.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter your Steam password.");
             return;
         }
 
         if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
         {
             Console.WriteLine("[UI] Validation failed: Invalid interval");
-            MessageBox.Show("Please enter a valid check interval (minimum 1 second).", 
-                "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppendStatus("⚠️ Please enter a valid check interval (minimum 1 second).");
             return;
         }
 
@@ -258,56 +256,86 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddGame_Click(object sender, RoutedEventArgs e)
+    private void GamePersonaGrid_InitializingNewItem(object sender, InitializingNewItemEventArgs e)
     {
-        var processName = NewGameProcessTextBox.Text.Trim();
-        var personaName = NewPersonaNameTextBox.Text.Trim();
-
-        if (string.IsNullOrWhiteSpace(processName) || string.IsNullOrWhiteSpace(personaName))
+        if (e.NewItem is GamePersonaMapping mapping)
         {
-            MessageBox.Show("Please enter both process name and persona name.", 
-                "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
+            // New items start as not committed
+            mapping.IsCommitted = false;
+            Console.WriteLine("[UI] Initializing new game persona mapping row");
         }
+    }
 
-        Console.WriteLine($"[UI] Adding game mapping: {processName} -> {personaName}");
-
-        // Check if already exists
-        if (_gamePersonaMappings.Any(m => m.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase)))
+    private void GamePersonaGrid_RowEditEnding(object sender, DataGridRowEditEndingEventArgs e)
+    {
+        if (e.EditAction == DataGridEditAction.Commit)
         {
-            Console.WriteLine($"[UI] Duplicate mapping detected for {processName}");
-            MessageBox.Show($"A mapping for '{processName}' already exists.", 
-                "Duplicate Entry", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
+            if (e.Row.Item is GamePersonaMapping mapping)
+            {
+                // If both fields are empty, schedule removal of the empty row
+                if (string.IsNullOrWhiteSpace(mapping.ProcessName) && string.IsNullOrWhiteSpace(mapping.PersonaName))
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_gamePersonaMappings.Contains(mapping))
+                        {
+                            _gamePersonaMappings.Remove(mapping);
+                            Console.WriteLine("[UI] Removed empty game mapping row");
+                        }
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+                // If only one field is filled, warn and remove
+                else if (string.IsNullOrWhiteSpace(mapping.ProcessName) || string.IsNullOrWhiteSpace(mapping.PersonaName))
+                {
+                    AppendStatus($"⚠️ Both process name and persona name are required.");
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_gamePersonaMappings.Contains(mapping))
+                        {
+                            _gamePersonaMappings.Remove(mapping);
+                        }
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+                // Both fields are filled - validate for duplicates
+                else
+                {
+                    // Check for duplicates (excluding the current item)
+                    var duplicate = _gamePersonaMappings.FirstOrDefault(m => 
+                        m != mapping && 
+                        m.ProcessName.Equals(mapping.ProcessName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (duplicate != null)
+                    {
+                        AppendStatus($"⚠️ A mapping for '{mapping.ProcessName}' already exists.");
+                        // Remove the duplicate entry
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            if (_gamePersonaMappings.Contains(mapping))
+                            {
+                                _gamePersonaMappings.Remove(mapping);
+                            }
+                        }), System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[UI] Game mapping added/updated: {mapping.ProcessName} -> {mapping.PersonaName}");
+                        AppendStatus($"✓ Added mapping: {mapping.ProcessName} → {mapping.PersonaName}");
+                        // Mark as committed so the Remove button appears
+                        mapping.IsCommitted = true;
+                    }
+                }
+            }
         }
-
-        _gamePersonaMappings.Add(new GamePersonaMapping 
-        { 
-            ProcessName = processName, 
-            PersonaName = personaName 
-        });
-        
-        Console.WriteLine($"[UI] Game mapping added. Total mappings: {_gamePersonaMappings.Count}");
-        
-        // Clear inputs
-        NewGameProcessTextBox.Text = "";
-        NewPersonaNameTextBox.Text = "";
-        
-        AppendStatus($"Added mapping: {processName} → {personaName}");
     }
 
     private void RemoveGame_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button button && button.Tag is string processName)
+        if (sender is Button button && button.Tag is GamePersonaMapping mapping)
         {
-            Console.WriteLine($"[UI] Removing game mapping: {processName}");
-            var item = _gamePersonaMappings.FirstOrDefault(m => m.ProcessName == processName);
-            if (item != null)
-            {
-                _gamePersonaMappings.Remove(item);
-                Console.WriteLine($"[UI] Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
-                AppendStatus($"Removed mapping: {processName}");
-            }
+            Console.WriteLine($"[UI] Removing game mapping: {mapping.ProcessName}");
+            _gamePersonaMappings.Remove(mapping);
+            Console.WriteLine($"[UI] Game mapping removed. Total mappings: {_gamePersonaMappings.Count}");
+            AppendStatus($"Removed mapping: {mapping.ProcessName}");
         }
     }
 
@@ -335,15 +363,11 @@ public partial class MainWindow : Window
             // Save tray preferences
             SaveTrayPreferences();
             
-            AppendStatus($"Configuration saved to {_configFilePath}");
-            MessageBox.Show($"Configuration saved successfully!\n\nLocation: {_configFilePath}", "Success", 
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            AppendStatus($"✓ Configuration saved successfully to {_configFilePath}");
         }
         catch (Exception ex)
         {
-            AppendStatus($"Failed to save config: {ex.Message}");
-            MessageBox.Show($"Failed to save configuration: {ex.Message}", "Error", 
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            AppendStatus($"❌ Failed to save config: {ex.Message}");
         }
     }
 
@@ -360,47 +384,30 @@ public partial class MainWindow : Window
         {
             if (!_credentialManager.HasSavedCredentials())
             {
-                MessageBox.Show("No saved credentials found.", "Information",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                AppendStatus("ℹ️ No saved credentials found.");
                 return;
             }
 
-            var result = MessageBox.Show(
-                "Are you sure you want to delete your saved credentials?\n\n" +
-                "You will need to re-enter your username and password next time.",
-                "Confirm Delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
+            AppendStatus("⚠️ Delete saved credentials? This will require re-entering username/password and Steam Guard on next login.");
+            Console.WriteLine("[UI] Deleting credentials...");
+            
+            _credentialManager.DeleteCredentials();
+            
+            // Also delete saved session
+            if (_sessionManager.HasSavedSession())
             {
-                Console.WriteLine("[UI] User confirmed credential deletion");
-                _credentialManager.DeleteCredentials();
-                
-                // Also delete saved session
-                if (_sessionManager.HasSavedSession())
-                {
-                    _sessionManager.DeleteSession();
-                    AppendStatus("Saved session also deleted.");
-                }
-                
-                RememberMeCheckBox.IsChecked = false;
-                PasswordBox.Password = string.Empty;
-                AppendStatus("Saved credentials deleted.");
-                Console.WriteLine("[UI] Credentials and session deleted successfully");
-                MessageBox.Show("Saved credentials and session have been deleted.\n\nYou will need to use Steam Guard on next login.", "Success",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                _sessionManager.DeleteSession();
+                AppendStatus("Saved session also deleted.");
             }
-            else
-            {
-                Console.WriteLine("[UI] User cancelled credential deletion");
-            }
+            
+            RememberMeCheckBox.IsChecked = false;
+            PasswordBox.Password = string.Empty;
+            AppendStatus("✓ Saved credentials and session deleted. Steam Guard will be required on next login.");
+            Console.WriteLine("[UI] Credentials and session deleted successfully");
         }
         catch (Exception ex)
         {
-            AppendStatus($"Failed to delete credentials: {ex.Message}");
-            MessageBox.Show($"Failed to delete credentials: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            AppendStatus($"❌ Failed to delete credentials: {ex.Message}");
         }
     }
 
@@ -439,7 +446,8 @@ public partial class MainWindow : Window
                             _gamePersonaMappings.Add(new GamePersonaMapping
                             {
                                 ProcessName = kvp.Key,
-                                PersonaName = kvp.Value
+                                PersonaName = kvp.Value,
+                                IsCommitted = true
                             });
                         }
                     }
@@ -458,12 +466,14 @@ public partial class MainWindow : Window
                 _gamePersonaMappings.Add(new GamePersonaMapping 
                 { 
                     ProcessName = "hl2.exe", 
-                    PersonaName = "Playing Half-Life 2" 
+                    PersonaName = "Playing Half-Life 2",
+                    IsCommitted = true
                 });
                 _gamePersonaMappings.Add(new GamePersonaMapping 
                 { 
                     ProcessName = "csgo.exe", 
-                    PersonaName = "Playing CS:GO" 
+                    PersonaName = "Playing CS:GO",
+                    IsCommitted = true
                 });
                 Console.WriteLine($"[Config] Added {_gamePersonaMappings.Count} default game persona mappings");
             }
@@ -480,7 +490,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LoadSavedCredentials()
+    private async void LoadSavedCredentials()
     {
         try
         {
@@ -496,6 +506,18 @@ public partial class MainWindow : Window
                     RememberMeCheckBox.IsChecked = true;
                     AppendStatus("Saved credentials loaded securely.");
                     Console.WriteLine($"[UI] Credentials loaded for user: {credentials.Value.Username}");
+                    
+                    // Auto-start the service if enabled
+                    if (AutoStartServiceCheckBox.IsChecked == true)
+                    {
+                        Console.WriteLine("[UI] Auto-starting service with saved credentials...");
+                        AppendStatus("🚀 Auto-starting service with saved credentials...");
+                        await AutoStartService();
+                    }
+                    else
+                    {
+                        Console.WriteLine("[UI] Auto-start disabled in settings");
+                    }
                 }
             }
             else
@@ -506,12 +528,67 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Console.WriteLine($"[UI] Failed to load saved credentials: {ex.Message}");
-            AppendStatus($"Failed to load saved credentials: {ex.Message}");
-            MessageBox.Show(
-                $"Could not load saved credentials: {ex.Message}\n\nPlease re-enter your credentials.",
-                "Credential Load Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            AppendStatus($"⚠️ Could not load saved credentials: {ex.Message}. Please re-enter your credentials.");
+        }
+    }
+
+    private async Task AutoStartService()
+    {
+        try
+        {
+            // Validate that we have the necessary inputs
+            if (string.IsNullOrWhiteSpace(UsernameTextBox.Text) || 
+                string.IsNullOrWhiteSpace(PasswordBox.Password))
+            {
+                Console.WriteLine("[UI] Auto-start skipped: Missing credentials");
+                return;
+            }
+
+            if (!int.TryParse(CheckIntervalTextBox.Text, out int interval) || interval < 1)
+            {
+                Console.WriteLine("[UI] Auto-start skipped: Invalid interval, using default 5 seconds");
+                CheckIntervalTextBox.Text = "5";
+                interval = 5;
+            }
+
+            var username = UsernameTextBox.Text.Trim();
+            var password = PasswordBox.Password;
+
+            // Create config from UI
+            var config = new Config
+            {
+                Username = username,
+                Password = password,
+                CheckIntervalSeconds = interval,
+                DefaultPersonaName = DefaultPersonaTextBox.Text.Trim(),
+                GamePersonaNames = _gamePersonaMappings.ToDictionary(
+                    m => m.ProcessName,
+                    m => m.PersonaName
+                )
+            };
+
+            // Update button states before starting
+            StartButton.IsEnabled = false;
+            StopButton.IsEnabled = true;
+            UsernameTextBox.IsEnabled = false;
+            PasswordBox.IsEnabled = false;
+            RememberMeCheckBox.IsEnabled = false;
+
+            // Start the service
+            Console.WriteLine($"[UI] Auto-starting service for user: {username}");
+            await _service.StartAsync(config);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Auto-start failed: {ex.Message}");
+            AppendStatus($"❌ Auto-start failed: {ex.Message}");
+            
+            // Reset button states on error
+            StartButton.IsEnabled = true;
+            StopButton.IsEnabled = false;
+            UsernameTextBox.IsEnabled = true;
+            PasswordBox.IsEnabled = true;
+            RememberMeCheckBox.IsEnabled = true;
         }
     }
 
@@ -521,6 +598,7 @@ public partial class MainWindow : Window
         {
             var prefs = new Dictionary<string, bool>
             {
+                ["AutoStartService"] = AutoStartServiceCheckBox.IsChecked ?? false,
                 ["StartMinimized"] = StartMinimizedCheckBox.IsChecked ?? false,
                 ["MinimizeToTray"] = MinimizeToTrayCheckBox.IsChecked ?? false,
                 ["CloseToTray"] = CloseToTrayCheckBox.IsChecked ?? false
@@ -552,6 +630,8 @@ public partial class MainWindow : Window
                 
                 if (prefs != null)
                 {
+                    if (prefs.TryGetValue("AutoStartService", out bool autoStart))
+                        AutoStartServiceCheckBox.IsChecked = autoStart;
                     if (prefs.TryGetValue("StartMinimized", out bool startMin))
                         StartMinimizedCheckBox.IsChecked = startMin;
                     if (prefs.TryGetValue("MinimizeToTray", out bool minToTray))
@@ -560,6 +640,9 @@ public partial class MainWindow : Window
                         CloseToTrayCheckBox.IsChecked = closeToTray;
                 }
             }
+            
+            // Load Run at Startup preference from registry
+            LoadRunAtStartupPreference();
         }
         catch
         {
@@ -580,7 +663,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Window_Closing(object sender, CancelEventArgs e)
+    private async void Window_Closing(object sender, CancelEventArgs e)
     {
         if (CloseToTrayCheckBox.IsChecked == true && !_isClosingToTray)
         {
@@ -593,9 +676,24 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Actually closing - cleanup
-            _service.StopAsync().Wait();
-            _trayIcon?.Dispose();
+            // Actually closing - cleanup asynchronously to avoid UI freeze
+            if (!_isShuttingDown)
+            {
+                e.Cancel = true; // Cancel the first close attempt
+                _isShuttingDown = true;
+                
+                Console.WriteLine("[UI] Window closing, stopping service...");
+                
+                // Stop service asynchronously
+                await _service.StopAsync();
+                
+                _trayIcon?.Dispose();
+                
+                Console.WriteLine("[UI] Service stopped, closing application");
+                
+                // Now actually close
+                Application.Current.Shutdown();
+            }
         }
     }
 
@@ -615,7 +713,75 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e)
     {
-        _isClosingToTray = true;
+        _isClosingToTray = false;
         Close();
+    }
+
+    private void RunAtStartup_Changed(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var runKey = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+            if (runKey == null)
+            {
+                AppendStatus("⚠️ Could not access Windows startup registry key.");
+                return;
+            }
+
+            const string appName = "SteamPersonaSwitcher";
+            
+            if (RunAtStartupCheckBox.IsChecked == true)
+            {
+                // Add to startup
+                var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrEmpty(exePath))
+                {
+                    runKey.SetValue(appName, $"\"{exePath}\"");
+                    Console.WriteLine($"[UI] Added to Windows startup: {exePath}");
+                    AppendStatus("✓ App will run when Windows starts.");
+                }
+            }
+            else
+            {
+                // Remove from startup
+                if (runKey.GetValue(appName) != null)
+                {
+                    runKey.DeleteValue(appName);
+                    Console.WriteLine("[UI] Removed from Windows startup");
+                    AppendStatus("✓ App removed from Windows startup.");
+                }
+            }
+            
+            runKey.Close();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Failed to update startup setting: {ex.Message}");
+            AppendStatus($"❌ Failed to update startup setting: {ex.Message}");
+        }
+    }
+
+    private void LoadRunAtStartupPreference()
+    {
+        try
+        {
+            var runKey = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false);
+            if (runKey != null)
+            {
+                const string appName = "SteamPersonaSwitcher";
+                var value = runKey.GetValue(appName);
+                RunAtStartupCheckBox.IsChecked = value != null;
+                runKey.Close();
+                
+                if (value != null)
+                {
+                    Console.WriteLine("[UI] App is set to run at Windows startup");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UI] Failed to check startup setting: {ex.Message}");
+        }
     }
 }

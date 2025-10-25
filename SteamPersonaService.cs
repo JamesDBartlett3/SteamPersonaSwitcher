@@ -261,7 +261,7 @@ public class SteamPersonaService
                         {
                             refreshToken = session.Value.RefreshToken;
                             RaiseStatus("Using saved session (no Steam Guard required)...");
-                            Console.WriteLine("[SERVICE] ✓ Username matches, attempting to use saved refresh token");
+                            Console.WriteLine("[SERVICE] ✓ Username matches, will use saved refresh token for login");
                         }
                         else
                         {
@@ -321,7 +321,7 @@ public class SteamPersonaService
 
                 refreshToken = pollResponse.RefreshToken;
                 
-                // Save the session for next time
+                // Save the refresh token for next time
                 if (_sessionManager != null && !string.IsNullOrEmpty(refreshToken))
                 {
                     try
@@ -338,12 +338,15 @@ public class SteamPersonaService
                 }
             }
 
-            // Log on using the refresh token (either saved or newly obtained)
+            // Log on using the refresh token (SteamKit2 accepts refresh token as AccessToken)
+            Console.WriteLine($"[SERVICE] Logging on with refresh token (length: {refreshToken?.Length ?? 0})");
             _steamUser!.LogOn(new SteamUser.LogOnDetails
             {
                 Username = _config.Username,
-                AccessToken = refreshToken,
+                AccessToken = refreshToken, // RefreshToken is used directly as AccessToken
+                ShouldRememberPassword = true,
             });
+            Console.WriteLine("[SERVICE] LogOn call completed, waiting for callback...");
         }
         catch (TaskCanceledException)
         {

@@ -9,6 +9,7 @@ public class GamePersonaMapping : INotifyPropertyChanged
 {
     private string _processName = string.Empty;
     private string _personaName = string.Empty;
+    private bool _isCommitted = false;
 
     public string ProcessName
     {
@@ -19,6 +20,7 @@ public class GamePersonaMapping : INotifyPropertyChanged
             {
                 _processName = value;
                 OnPropertyChanged(nameof(ProcessName));
+                OnPropertyChanged(nameof(IsNotEmpty));
             }
         }
     }
@@ -32,6 +34,28 @@ public class GamePersonaMapping : INotifyPropertyChanged
             {
                 _personaName = value;
                 OnPropertyChanged(nameof(PersonaName));
+                OnPropertyChanged(nameof(IsNotEmpty));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns true if both ProcessName and PersonaName are not empty
+    /// </summary>
+    public bool IsNotEmpty => !string.IsNullOrWhiteSpace(_processName) && !string.IsNullOrWhiteSpace(_personaName);
+
+    /// <summary>
+    /// Returns true if this item has been committed to the collection (not a new placeholder row)
+    /// </summary>
+    public bool IsCommitted
+    {
+        get => _isCommitted;
+        set
+        {
+            if (_isCommitted != value)
+            {
+                _isCommitted = value;
+                OnPropertyChanged(nameof(IsCommitted));
             }
         }
     }
