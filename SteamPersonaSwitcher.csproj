@@ -10,6 +10,14 @@
     <Authors>JamesDBartlett3</Authors>
     <Description>Automatically change your Steam profile name based on which game you're playing</Description>
     <ApplicationIcon>icon.ico</ApplicationIcon>
+    
+    <!-- Single-file executable configuration -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
