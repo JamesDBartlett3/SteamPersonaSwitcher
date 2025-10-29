@@ -16,8 +16,14 @@
 - Settings toggles
   - Tray
     - [x] When app starts minimized to tray, change the notification to indicate that the app is running in the tray, indicate the current status (e.g. "Disconnected"), and provide instructions on how to restore the main window from the tray.
-      - [ ] If possible, include an option in the notification to restore the main window directly from the notification itself.
-      - [ ] If possible, include an option in the notification to disable the notification when starting minimized to tray in the future.
+      - [ ] Upgrade from balloon tips to Windows Toast Notifications to enable interactive notifications.
+        - [ ] Add `Microsoft.Toolkit.Uwp.Notifications` package reference.
+        - [ ] Register app with AppUserModelId for notification system.
+        - [ ] Replace `ShowBalloonTip()` calls with toast notifications.
+        - [ ] Include "Restore Window" button in the notification to restore the main window directly.
+        - [ ] Include "Don't Show Again" button in the notification to disable future startup notifications.
+        - [ ] Implement toast notification button click handlers.
+        - [ ] Store "Don't Show Again" preference in tray preferences.
     - [x] "Start minimized to tray" should be a sub-setting under "Minimize to tray (instead of taskbar)."
     - [x] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray (instead of taskbar)."
     - [x] Add "Start/Stop Service" option to systray context menu (simplified from separate Start/Stop and Connect/Disconnect).
