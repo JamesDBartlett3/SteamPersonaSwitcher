@@ -33,6 +33,12 @@ public partial class MainWindow : Window
     
     // Track whether we've shown the tray notification this session to avoid spam
     private bool _hasShownTrayNotification = false;
+    
+    // Track the last persona name to detect actual changes (not initial set)
+    private string? _lastPersonaName = null;
+    
+    // Track if we're waiting to update the start-minimized notification when connected
+    private bool _waitingForConnectionToShowNotification = false;
 
     public MainWindow()
     {
@@ -97,6 +103,13 @@ public partial class MainWindow : Window
         {
             WindowState = WindowState.Minimized;
             Hide();
+            
+            // Show the start-minimized notification after hiding
+            // Use Dispatcher to ensure it runs after the window is actually hidden
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ShowStartMinimizedNotification();
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
     }
 
@@ -107,20 +120,18 @@ public partial class MainWindow : Window
         MinWidth = 800; // Set minimum width to the initial width
         MinHeight = ActualHeight + 20; // Add 20px buffer for padding
         SizeToContent = SizeToContent.Manual; // Disable auto-sizing after initial render
-        
-        // Show enhanced notification if started minimized to tray
-        if (MinimizeToTrayCheckBox.IsChecked == true && 
-            StartMinimizedCheckBox.IsChecked == true && 
-            !IsVisible)
-        {
-            ShowStartMinimizedNotification();
-        }
     }
 
-    private void ShowStartMinimizedNotification()
+    private async void ShowStartMinimizedNotification()
     {
+        // Set flag to suppress regular connection notifications during startup
+        _waitingForConnectionToShowNotification = true;
+        
+        // Wait briefly to allow auto-connect to establish (if enabled)
+        await Task.Delay(1200); // 1.2 seconds - enough time for most connections
+        
         string status = _service.IsRunning 
-            ? (_service.IsLoggedIn ? "Connected" : "Connecting...") 
+            ? (_service.IsLoggedIn ? "Connected!" : "Connecting...") 
             : "Disconnected";
         
         string message = $"Status: {status}\n\n" +
@@ -132,7 +143,23 @@ public partial class MainWindow : Window
             Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
         
         _debugLogger.Info($"Start minimized notification shown - Status: {status}");
-        _hasShownTrayNotification = true; // Mark as shown to avoid duplicate notifications
+        _hasShownTrayNotification = true;
+        
+        // If already connected, clear the flag now
+        if (_service.IsLoggedIn)
+        {
+            _waitingForConnectionToShowNotification = false;
+            _debugLogger.Debug("Already connected - clearing notification flag");
+        }
+        // Otherwise keep the flag set to update when connection completes
+        else if (_service.IsRunning)
+        {
+            _debugLogger.Debug("Still connecting after delay - will update notification when connected");
+        }
+        else
+        {
+            _waitingForConnectionToShowNotification = false;
+        }
     }
 
     private void OnStatusChanged(object? sender, string message)
@@ -151,10 +178,21 @@ public partial class MainWindow : Window
             _debugLogger.Info($"Persona changed to: {personaName}");
             AppendStatus($"[{DateTime.Now:HH:mm:ss}] ✓ Persona changed to: {personaName}");
             
-            // Show tray notification
-            _trayIcon?.ShowBalloonTip("Persona Changed", 
-                $"Now: {personaName}", 
-                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            // Only show notification if this is an actual change (not the first time it's set)
+            if (_lastPersonaName != null && _lastPersonaName != personaName)
+            {
+                _trayIcon?.ShowBalloonTip("Persona Changed", 
+                    $"Now: {personaName}", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                _debugLogger.Debug($"Persona changed notification shown: {_lastPersonaName} → {personaName}");
+            }
+            else if (_lastPersonaName == null)
+            {
+                _debugLogger.Debug($"Persona set for first time: {personaName} (notification suppressed)");
+            }
+            
+            // Update last known persona name
+            _lastPersonaName = personaName;
         });
     }
 
@@ -172,12 +210,49 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(() =>
         {
             Console.WriteLine($"[UI EVENT] Connection state changed: {(isConnected ? "CONNECTED" : "DISCONNECTED")}");
+            _debugLogger.Info($"[UI EVENT] Connection state changed: {(isConnected ? "CONNECTED" : "DISCONNECTED")}");
+            _debugLogger.Debug($"_waitingForConnectionToShowNotification = {_waitingForConnectionToShowNotification}");
+            
             Title = isConnected 
                 ? "Steam Persona Switcher - Connected" 
                 : "Steam Persona Switcher - Disconnected";
             
             // Update tray menu to reflect current state
             UpdateTrayContextMenu();
+            
+            // If we're waiting to update the start-minimized notification, do it now
+            if (_waitingForConnectionToShowNotification && isConnected)
+            {
+                _waitingForConnectionToShowNotification = false;
+                _debugLogger.Info("Connection established - updating start-minimized notification");
+                
+                // Close any existing balloon (this doesn't actually work reliably in Windows)
+                // but showing a new one should replace it
+                string connectedMessage = "Status: Connected!\n\n" +
+                                         "Double-click the tray icon or right-click → Show Window to restore.";
+                
+                _debugLogger.Debug($"Showing 'Connected!' balloon notification");
+                _trayIcon?.ShowBalloonTip(
+                    "Steam Persona Switcher", 
+                    connectedMessage, 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                
+                _debugLogger.Info("Start-minimized notification updated to 'Connected!'");
+            }
+            // If window is hidden (in tray), show connection status notifications
+            else if (!IsVisible && !_waitingForConnectionToShowNotification)
+            {
+                if (isConnected)
+                {
+                    _trayIcon?.ShowBalloonTip(
+                        "Steam Persona Switcher", 
+                        "Connected to Steam!", 
+                        Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    _debugLogger.Debug("Showed 'Connected' notification (window hidden)");
+                }
+                // Don't show disconnect notification - the "Service stopping..." notification already showed
+                // and the delay can be long, making it confusing
+            }
         });
     }
 
@@ -539,11 +614,11 @@ public partial class MainWindow : Window
                 _debugLogger.Info($"Added {_gamePersonaMappings.Count} default game persona mappings");
             }
             
-            // Load saved credentials if they exist
-            LoadSavedCredentials();
-            
-            // Load tray preferences
+            // Load tray preferences FIRST (before loading credentials/auto-starting)
             LoadTrayPreferences();
+            
+            // Load saved credentials if they exist (and possibly auto-start service)
+            LoadSavedCredentials();
         }
         catch (Exception ex)
         {
@@ -867,6 +942,11 @@ public partial class MainWindow : Window
             // Stop the service - call Stop_Click directly (it's async void, so we can't await it)
             _debugLogger.Info("Stopping service via tray menu");
             Stop_Click(sender, e);
+            
+            // Show notification that service is stopping
+            _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                "Service stopping...", 
+                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
         }
         else
         {
@@ -888,6 +968,11 @@ public partial class MainWindow : Window
                         RememberMeCheckBox.IsChecked = true;
                         
                         _debugLogger.Info("Loaded saved credentials for tray start");
+                        
+                        // Show notification that service is starting
+                        _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                            "Starting service...", 
+                            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
                         
                         // Trigger the start (it's async void, so we can't await it)
                         Start_Click(sender, e);
