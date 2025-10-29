@@ -41,6 +41,8 @@
                 <ContextMenu x:Name="TrayContextMenu">
                     <MenuItem Header="Show Window" Click="ShowWindow_Click"/>
                     <Separator/>
+                    <MenuItem x:Name="TrayStartStopMenuItem" Header="Start Service" Click="TrayStartStop_Click"/>
+                    <Separator/>
                     <MenuItem Header="Exit" Click="Exit_Click"/>
                 </ContextMenu>
             </tb:TaskbarIcon.ContextMenu>
@@ -96,11 +98,26 @@
         <!-- Startup & Tray Options -->
         <GroupBox Grid.Row="1" Header="Startup &amp; Tray Options" Padding="10">
             <StackPanel>
-                <CheckBox x:Name="RunAtStartupCheckBox" Content="Run when Windows starts" Checked="RunAtStartup_Changed" Unchecked="RunAtStartup_Changed"/>
-                <CheckBox x:Name="AutoStartServiceCheckBox" Content="Automatically start service on launch" IsChecked="True"/>
-                <CheckBox x:Name="StartMinimizedCheckBox" Content="Start minimized to tray"/>
-                <CheckBox x:Name="MinimizeToTrayCheckBox" Content="Minimize to tray instead of taskbar"/>
-                <CheckBox x:Name="CloseToTrayCheckBox" Content="Minimize to tray on close (instead of exiting)" IsChecked="True"/>
+                <CheckBox x:Name="RunAtStartupCheckBox" Content="Run when Windows starts" 
+                          HorizontalAlignment="Left"
+                          Checked="RunAtStartup_Changed" Unchecked="RunAtStartup_Changed"/>
+                <CheckBox x:Name="AutoStartServiceCheckBox" Content="Automatically start service on launch" 
+                          HorizontalAlignment="Left"
+                          IsChecked="True"/>
+                <CheckBox x:Name="MinimizeToTrayCheckBox" Content="Minimize to tray (instead of taskbar)" 
+                          HorizontalAlignment="Left"
+                          Checked="MinimizeToTray_Changed" Unchecked="MinimizeToTray_Changed"/>
+                <CheckBox x:Name="StartMinimizedCheckBox" Content="Start minimized to tray" 
+                          HorizontalAlignment="Left"
+                          Margin="25,0,0,0"
+                          ToolTip="Requires 'Minimize to tray' to be enabled"
+                          ToolTipService.ShowOnDisabled="True"/>
+                <CheckBox x:Name="CloseToTrayCheckBox" Content="Close to tray (instead of exiting)" 
+                          HorizontalAlignment="Left"
+                          Margin="25,0,0,0"
+                          IsChecked="True"
+                          ToolTip="Requires 'Minimize to tray' to be enabled"
+                          ToolTipService.ShowOnDisabled="True"/>
             </StackPanel>
         </GroupBox>
 
