@@ -1,6 +1,8 @@
 # Bug Fixes
 
-- [ ] Fix excessive tray notifications relating to minimize/close to tray actions.
+- [x] Fix excessive tray notifications relating to minimize/close to tray actions.
+- [x] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
+- [x] Fix issue where the app cannot be exited when the "Close to tray" option is enabled.
 
 # Enhancements
 
@@ -12,14 +14,18 @@
     - [ ] Use display name in tooltips and logs instead of exe name where appropriate.
 - Settings toggles
   - Tray
-    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray instead of taskbar."
-    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray instead of taskbar."
-    - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
+    - [ ] When app starts minimized to tray, change the notification to indicate that the app is running in the tray, indicate the current status (e.g. "Disconnected"), and provide instructions on how to restore the main window from the tray.
+      - [ ] If possible, include an option in the notification to restore the main window directly from the notification itself.
+      - [ ] If possible, include an option in the notification to disable the notification when starting minimized to tray in the future.
+    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [ ] Add "Start/Stop Service" and "Connect/Disconnect" options to systray context menu.
   - [ ] Add "Auto-save changes to game-persona mapping list" setting.
+    - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
     - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
     - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
   - [ ] Separate settings into columns or sections for better organization (e.g. General Settings, Steam Settings, UI Settings, etc.).
-- [ ] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
+- [x] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
 - [ ] Dark/Light Mode support for the entire application.
   - [ ] Implement a toggle switch in the settings to allow users to switch between Dark and Light mode.
   - [ ] Include option for app to follow OS theme automatically.

@@ -17,7 +17,7 @@ public partial class MainWindow : Window
 {
     private readonly SteamPersonaService _service;
     private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
-    private bool _isClosingToTray = false;
+    private bool _forceActualClose = false;
     private bool _isShuttingDown = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     private DebugPanelWindow? _debugPanelWindow;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
+    
+    // Track whether we've shown the tray notification this session to avoid spam
+    private bool _hasShownTrayNotification = false;
 
     public MainWindow()
     {
@@ -679,22 +682,45 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized && MinimizeToTrayCheckBox.IsChecked == true)
         {
             Hide();
-            _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
-                "Application minimized to tray", 
-                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            
+            // Only show notification the first time per session (regardless of minimize or close)
+            if (!_hasShownTrayNotification)
+            {
+                _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                    "Application minimized to tray", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                _hasShownTrayNotification = true;
+                _debugLogger.Info("Sent to tray via minimize - notification shown");
+            }
+            else
+            {
+                _debugLogger.Info("Sent to tray via minimize - notification suppressed (already shown this session)");
+            }
         }
     }
 
     private async void Window_Closing(object sender, CancelEventArgs e)
     {
-        if (CloseToTrayCheckBox.IsChecked == true && !_isClosingToTray)
+        // If "Close to tray" is enabled AND we're not forcing an actual close, minimize to tray instead
+        if (CloseToTrayCheckBox.IsChecked == true && !_forceActualClose)
         {
             e.Cancel = true;
             WindowState = WindowState.Minimized;
             Hide();
-            _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
-                "Application minimized to tray. Right-click the tray icon to exit.", 
-                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            
+            // Only show notification the first time per session (regardless of minimize or close)
+            if (!_hasShownTrayNotification)
+            {
+                _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                    "Application minimized to tray. Right-click the tray icon to exit.", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                _hasShownTrayNotification = true;
+                _debugLogger.Info("Sent to tray via close - notification shown");
+            }
+            else
+            {
+                _debugLogger.Info("Sent to tray via close - notification suppressed (already shown this session)");
+            }
         }
         else
         {
@@ -726,6 +752,29 @@ public partial class MainWindow : Window
         Activate();
     }
 
+    private void TrayIcon_TrayContextMenuOpen(object sender, RoutedEventArgs e)
+    {
+        // Handle DPI-aware positioning of the context menu
+        if (_trayIcon?.ContextMenu != null)
+        {
+            _trayIcon.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.AbsolutePoint;
+            
+            // Get the current mouse position using P/Invoke
+            if (GetCursorPos(out POINT cursorPos))
+            {
+                // Convert to WPF coordinates with DPI awareness
+                var dpiScale = VisualTreeHelper.GetDpi(this);
+                var scaledX = cursorPos.X / dpiScale.DpiScaleX;
+                var scaledY = cursorPos.Y / dpiScale.DpiScaleY;
+                
+                _trayIcon.ContextMenu.HorizontalOffset = scaledX;
+                _trayIcon.ContextMenu.VerticalOffset = scaledY;
+                
+                _debugLogger.Info($"Context menu positioning - Cursor: ({cursorPos.X}, {cursorPos.Y}), DPI Scale: {dpiScale.DpiScaleX}x{dpiScale.DpiScaleY}, Scaled: ({scaledX}, {scaledY})");
+            }
+        }
+    }
+
     private void ShowWindow_Click(object sender, RoutedEventArgs e)
     {
         Show();
@@ -735,7 +784,7 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e)
     {
-        _isClosingToTray = false;
+        _forceActualClose = true;
         Close();
     }
 
@@ -935,6 +984,17 @@ public partial class MainWindow : Window
         {
             _debugLogger.Warning($"Failed to load debug panel preferences: {ex.Message}");
         }
+    }
+
+    // P/Invoke for getting cursor position
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
     }
 }
 
