@@ -15,12 +15,12 @@
     - [ ] Use display name in tooltips and logs instead of exe name where appropriate.
 - Settings toggles
   - Tray
-    - [ ] When app starts minimized to tray, change the notification to indicate that the app is running in the tray, indicate the current status (e.g. "Disconnected"), and provide instructions on how to restore the main window from the tray.
+    - [x] When app starts minimized to tray, change the notification to indicate that the app is running in the tray, indicate the current status (e.g. "Disconnected"), and provide instructions on how to restore the main window from the tray.
       - [ ] If possible, include an option in the notification to restore the main window directly from the notification itself.
       - [ ] If possible, include an option in the notification to disable the notification when starting minimized to tray in the future.
-    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray (instead of taskbar)."
-    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray (instead of taskbar)."
-    - [ ] Add "Start/Stop Service" and "Connect/Disconnect" options to systray context menu.
+    - [x] "Start minimized to tray" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [x] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [x] Add "Start/Stop Service" option to systray context menu (simplified from separate Start/Stop and Connect/Disconnect).
   - [ ] Add "Auto-save changes to game-persona mapping list" setting.
     - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
     - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
