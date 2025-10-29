@@ -173,19 +173,28 @@
                             </Style>
                         </DataGridTextColumn.EditingElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTemplateColumn Header="Actions" Width="80">
+                    <DataGridTemplateColumn Header="" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Remove" Click="RemoveGame_Click" 
+                                <Button Content="❌" Click="RemoveGame_Click" 
                                         Tag="{Binding}"
                                         VerticalAlignment="Center"
                                         HorizontalAlignment="Center"
-                                        MinWidth="70"
-                                        Padding="5,2">
+                                        MinWidth="30"
+                                        Width="30"
+                                        Height="26"
+                                        Padding="0"
+                                        FontSize="14"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        ToolTip="Remove this game-persona mapping">
                                     <Button.Style>
                                         <Style TargetType="Button">
                                             <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Setter Property="Opacity" Value="0"/>
                                             <Style.Triggers>
+                                                <!-- Show button only for committed, non-empty entries -->
                                                 <MultiDataTrigger>
                                                     <MultiDataTrigger.Conditions>
                                                         <Condition Binding="{Binding ProcessName, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
@@ -194,6 +203,28 @@
                                                     </MultiDataTrigger.Conditions>
                                                     <Setter Property="Visibility" Value="Visible"/>
                                                 </MultiDataTrigger>
+                                                <!-- Show button on row hover -->
+                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsMouseOver}" Value="True">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                                <!-- Hover effect for the button itself -->
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#FFEEEE"/>
+                                                    <Setter Property="FontSize" Value="16"/>
+                                                </Trigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Button.Style>

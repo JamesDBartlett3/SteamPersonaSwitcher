@@ -1,6 +1,8 @@
 # Bug Fixes
 
 - [ ] Fix excessive tray notifications relating to minimize/close to tray actions.
+- [ ] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
+- [ ] Fix issue where the app cannot be exited when the "Close to tray" option is enabled.
 
 # Enhancements
 
@@ -19,7 +21,7 @@
     - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
     - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
   - [ ] Separate settings into columns or sections for better organization (e.g. General Settings, Steam Settings, UI Settings, etc.).
-- [ ] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
+- [x] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
 - [ ] Dark/Light Mode support for the entire application.
   - [ ] Implement a toggle switch in the settings to allow users to switch between Dark and Light mode.
   - [ ] Include option for app to follow OS theme automatically.
