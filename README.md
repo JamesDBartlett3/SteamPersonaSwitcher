@@ -2,6 +2,9 @@
 
 Automatically change your Steam profile name (persona name) based on which game you're currently playing.
 
+<!-- Embed the logo here -->
+![Steam Persona Switcher Logo](https://raw.githubusercontent.com/JamesDBartlett3/SteamPersonaSwitcher/main/SteamPersonaSwitcher_Transparent.png)
+
 ## Features
 
 - 🎮 Monitors running processes to detect games
