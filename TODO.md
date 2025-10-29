@@ -65,6 +65,9 @@
   - [ ] If the service is running but the GUI is not, if an error occurs, launch the GUI to show the error.
 - [ ] Exponentially back off reconnection attempts after repeated failures, up to a maximum delay (e.g., start with 5 seconds, then 10, 30, 60, up to a max of 15 minutes).
 - [ ] Support for .NET 9.0
+- [ ] Auto-update functionality using GitHub Releases.
+  - [ ] Check for updates on startup and notify the user if a new version is available.
+  - [ ] Provide an option to download and install the update directly from the application.
 
 # Cleanup Tasks
 
