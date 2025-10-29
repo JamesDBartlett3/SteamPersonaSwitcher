@@ -91,8 +91,9 @@ public partial class MainWindow : Window
         LoadConfiguration();
         LoadDebugPanelPreferences();
         
-        // Check if should start minimized
-        if (StartMinimizedCheckBox.IsChecked == true)
+        // Check if should start minimized (only if parent "Minimize to tray" is also enabled)
+        if (MinimizeToTrayCheckBox.IsChecked == true && 
+            StartMinimizedCheckBox.IsChecked == true)
         {
             WindowState = WindowState.Minimized;
             Hide();
@@ -106,6 +107,32 @@ public partial class MainWindow : Window
         MinWidth = 800; // Set minimum width to the initial width
         MinHeight = ActualHeight + 20; // Add 20px buffer for padding
         SizeToContent = SizeToContent.Manual; // Disable auto-sizing after initial render
+        
+        // Show enhanced notification if started minimized to tray
+        if (MinimizeToTrayCheckBox.IsChecked == true && 
+            StartMinimizedCheckBox.IsChecked == true && 
+            !IsVisible)
+        {
+            ShowStartMinimizedNotification();
+        }
+    }
+
+    private void ShowStartMinimizedNotification()
+    {
+        string status = _service.IsRunning 
+            ? (_service.IsLoggedIn ? "Connected" : "Connecting...") 
+            : "Disconnected";
+        
+        string message = $"Status: {status}\n\n" +
+                        "Double-click the tray icon or right-click → Show Window to restore.";
+        
+        _trayIcon?.ShowBalloonTip(
+            "Steam Persona Switcher Running", 
+            message, 
+            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+        
+        _debugLogger.Info($"Start minimized notification shown - Status: {status}");
+        _hasShownTrayNotification = true; // Mark as shown to avoid duplicate notifications
     }
 
     private void OnStatusChanged(object? sender, string message)
@@ -148,6 +175,9 @@ public partial class MainWindow : Window
             Title = isConnected 
                 ? "Steam Persona Switcher - Connected" 
                 : "Steam Persona Switcher - Disconnected";
+            
+            // Update tray menu to reflect current state
+            UpdateTrayContextMenu();
         });
     }
 
@@ -239,6 +269,9 @@ public partial class MainWindow : Window
         AppendStatus("Starting Steam Persona Switcher...");
         
         await _service.StartAsync(config);
+        
+        // Update tray menu to reflect service started
+        UpdateTrayContextMenu();
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
@@ -278,6 +311,9 @@ public partial class MainWindow : Window
             UsernameTextBox.IsEnabled = true;
             PasswordBox.IsEnabled = true;
             RememberMeCheckBox.IsEnabled = true;
+            
+            // Update tray menu to reflect service stopped
+            UpdateTrayContextMenu();
         }
     }
 
@@ -666,6 +702,13 @@ public partial class MainWindow : Window
                 }
             }
             
+            // Apply parent-child hierarchy after loading values
+            bool isMinimizeToTrayEnabled = MinimizeToTrayCheckBox.IsChecked == true;
+            StartMinimizedCheckBox.IsEnabled = isMinimizeToTrayEnabled;
+            CloseToTrayCheckBox.IsEnabled = isMinimizeToTrayEnabled;
+            StartMinimizedCheckBox.Opacity = isMinimizeToTrayEnabled ? 1.0 : 0.5;
+            CloseToTrayCheckBox.Opacity = isMinimizeToTrayEnabled ? 1.0 : 0.5;
+            
             // Load Run at Startup preference from registry
             LoadRunAtStartupPreference();
         }
@@ -701,8 +744,10 @@ public partial class MainWindow : Window
 
     private async void Window_Closing(object sender, CancelEventArgs e)
     {
-        // If "Close to tray" is enabled AND we're not forcing an actual close, minimize to tray instead
-        if (CloseToTrayCheckBox.IsChecked == true && !_forceActualClose)
+        // If "Close to tray" is enabled AND parent "Minimize to tray" is enabled AND we're not forcing an actual close
+        if (MinimizeToTrayCheckBox.IsChecked == true && 
+            CloseToTrayCheckBox.IsChecked == true && 
+            !_forceActualClose)
         {
             e.Cancel = true;
             WindowState = WindowState.Minimized;
@@ -754,6 +799,9 @@ public partial class MainWindow : Window
 
     private void TrayIcon_TrayContextMenuOpen(object sender, RoutedEventArgs e)
     {
+        // Update menu items based on current state
+        UpdateTrayContextMenu();
+        
         // Handle DPI-aware positioning of the context menu
         if (_trayIcon?.ContextMenu != null)
         {
@@ -786,6 +834,99 @@ public partial class MainWindow : Window
     {
         _forceActualClose = true;
         Close();
+    }
+
+    private void UpdateTrayContextMenu()
+    {
+        // Access the menu item from the tray icon's context menu
+        if (_trayIcon?.ContextMenu != null && 
+            _trayIcon.ContextMenu.Items.Count > 2 && 
+            _trayIcon.ContextMenu.Items[2] is MenuItem startStopMenuItem)
+        {
+            bool isRunning = _service.IsRunning;
+            
+            if (isRunning)
+            {
+                startStopMenuItem.Header = "Stop Service";
+                _debugLogger.Debug("Tray menu: Set to 'Stop Service'");
+            }
+            else
+            {
+                startStopMenuItem.Header = "Start Service";
+                _debugLogger.Debug("Tray menu: Set to 'Start Service'");
+            }
+        }
+    }
+
+    private void TrayStartStop_Click(object sender, RoutedEventArgs e)
+    {
+        _debugLogger.Info("Tray Start/Stop menu item clicked");
+        
+        if (_service.IsRunning)
+        {
+            // Stop the service - call Stop_Click directly (it's async void, so we can't await it)
+            _debugLogger.Info("Stopping service via tray menu");
+            Stop_Click(sender, e);
+        }
+        else
+        {
+            // Start the service
+            _debugLogger.Info("Starting service via tray menu");
+            
+            // Check if we have saved credentials
+            if (_credentialManager.HasSavedCredentials())
+            {
+                var credentials = _credentialManager.LoadCredentials();
+                if (credentials.HasValue)
+                {
+                    var (savedUsername, savedPassword) = credentials.Value;
+                    if (!string.IsNullOrWhiteSpace(savedUsername) && !string.IsNullOrWhiteSpace(savedPassword))
+                    {
+                        // Auto-populate credentials
+                        UsernameTextBox.Text = savedUsername;
+                        PasswordBox.Password = savedPassword;
+                        RememberMeCheckBox.IsChecked = true;
+                        
+                        _debugLogger.Info("Loaded saved credentials for tray start");
+                        
+                        // Trigger the start (it's async void, so we can't await it)
+                        Start_Click(sender, e);
+                    }
+                    else
+                    {
+                        _debugLogger.Warning("No valid saved credentials found for tray start");
+                        _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                            "Please open the window and enter your credentials to start the service.", 
+                            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+                        Show();
+                        WindowState = WindowState.Normal;
+                        Activate();
+                    }
+                }
+                else
+                {
+                    _debugLogger.Info("Could not load saved credentials for tray start - showing window");
+                    _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                        "Please open the window and enter your credentials to start the service.", 
+                        Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                    Show();
+                    WindowState = WindowState.Normal;
+                    Activate();
+                }
+            }
+            else
+            {
+                _debugLogger.Info("No saved credentials for tray start - showing window");
+                _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                    "Please open the window and enter your credentials to start the service.", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+            }
+        }
+        
+        // Menu will be updated via OnConnectionStateChanged event
     }
 
     private void RunAtStartup_Changed(object sender, RoutedEventArgs e)
@@ -830,6 +971,24 @@ public partial class MainWindow : Window
             _debugLogger.Info($"Failed to update startup setting: {ex.Message}");
             AppendStatus($"❌ Failed to update startup setting: {ex.Message}");
         }
+    }
+
+    private void MinimizeToTray_Changed(object sender, RoutedEventArgs e)
+    {
+        bool isEnabled = MinimizeToTrayCheckBox.IsChecked == true;
+        
+        // Update child checkbox states
+        StartMinimizedCheckBox.IsEnabled = isEnabled;
+        CloseToTrayCheckBox.IsEnabled = isEnabled;
+        
+        // Visual feedback - reduce opacity when disabled
+        StartMinimizedCheckBox.Opacity = isEnabled ? 1.0 : 0.5;
+        CloseToTrayCheckBox.Opacity = isEnabled ? 1.0 : 0.5;
+        
+        _debugLogger.Info($"Minimize to tray {(isEnabled ? "enabled" : "disabled")}");
+        
+        // Save preferences immediately
+        SaveTrayPreferences();
     }
 
     private void LoadRunAtStartupPreference()

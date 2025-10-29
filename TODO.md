@@ -1,5 +1,6 @@
 # Bug Fixes
 
+- [ ] Fix "Status"" widget in the main window not scrolling to the bottom of the messages when the app is launched minimized to tray and then opened.
 - [x] Fix excessive tray notifications relating to minimize/close to tray actions.
 - [x] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
 - [x] Fix issue where the app cannot be exited when the "Close to tray" option is enabled.

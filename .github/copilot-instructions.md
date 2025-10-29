@@ -186,6 +186,9 @@ DebugLogger.Instance.Debug("Debug details");
   ```powershell
   dotnet build; dotnet run -c Debug -r win-x64
   ```
+- After implementing new code, provide the user with a list of tests to verify functionality.
+- Do not proceed until user has confirmed that all tests pass.
+- Do not mark the task as complete until user confirms that all tests pass.
 
 ### Adding New Features
 
