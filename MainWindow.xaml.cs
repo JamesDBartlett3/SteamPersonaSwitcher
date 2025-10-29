@@ -17,7 +17,7 @@ public partial class MainWindow : Window
 {
     private readonly SteamPersonaService _service;
     private ObservableCollection<GamePersonaMapping> _gamePersonaMappings;
-    private bool _isClosingToTray = false;
+    private bool _forceActualClose = false;
     private bool _isShuttingDown = false;
     private readonly string _configDirectory;
     private readonly string _configFilePath;
@@ -701,7 +701,8 @@ public partial class MainWindow : Window
 
     private async void Window_Closing(object sender, CancelEventArgs e)
     {
-        if (CloseToTrayCheckBox.IsChecked == true && !_isClosingToTray)
+        // If "Close to tray" is enabled AND we're not forcing an actual close, minimize to tray instead
+        if (CloseToTrayCheckBox.IsChecked == true && !_forceActualClose)
         {
             e.Cancel = true;
             WindowState = WindowState.Minimized;
@@ -783,7 +784,7 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e)
     {
-        _isClosingToTray = false;
+        _forceActualClose = true;
         Close();
     }
 
