@@ -35,9 +35,10 @@
         <tb:TaskbarIcon x:Key="TrayIcon"
                         IconSource="icon.ico"
                         ToolTipText="Steam Persona Switcher"
-                        TrayMouseDoubleClick="TrayIcon_TrayMouseDoubleClick">
+                        TrayMouseDoubleClick="TrayIcon_TrayMouseDoubleClick"
+                        TrayContextMenuOpen="TrayIcon_TrayContextMenuOpen">
             <tb:TaskbarIcon.ContextMenu>
-                <ContextMenu>
+                <ContextMenu x:Name="TrayContextMenu">
                     <MenuItem Header="Show Window" Click="ShowWindow_Click"/>
                     <Separator/>
                     <MenuItem Header="Exit" Click="Exit_Click"/>

@@ -1,7 +1,7 @@
 # Bug Fixes
 
 - [x] Fix excessive tray notifications relating to minimize/close to tray actions.
-- [ ] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
+- [x] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
 - [ ] Fix issue where the app cannot be exited when the "Close to tray" option is enabled.
 
 # Enhancements
@@ -14,10 +14,11 @@
     - [ ] Use display name in tooltips and logs instead of exe name where appropriate.
 - Settings toggles
   - Tray
-    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray instead of taskbar."
-    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray instead of taskbar."
-    - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
+    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray (instead of taskbar)."
+    - [ ] Add "Start/Stop Service" and "Connect/Disconnect" options to systray context menu.
   - [ ] Add "Auto-save changes to game-persona mapping list" setting.
+    - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
     - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
     - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
   - [ ] Separate settings into columns or sections for better organization (e.g. General Settings, Steam Settings, UI Settings, etc.).

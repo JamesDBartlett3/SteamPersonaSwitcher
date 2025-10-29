@@ -751,6 +751,29 @@ public partial class MainWindow : Window
         Activate();
     }
 
+    private void TrayIcon_TrayContextMenuOpen(object sender, RoutedEventArgs e)
+    {
+        // Handle DPI-aware positioning of the context menu
+        if (_trayIcon?.ContextMenu != null)
+        {
+            _trayIcon.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.AbsolutePoint;
+            
+            // Get the current mouse position using P/Invoke
+            if (GetCursorPos(out POINT cursorPos))
+            {
+                // Convert to WPF coordinates with DPI awareness
+                var dpiScale = VisualTreeHelper.GetDpi(this);
+                var scaledX = cursorPos.X / dpiScale.DpiScaleX;
+                var scaledY = cursorPos.Y / dpiScale.DpiScaleY;
+                
+                _trayIcon.ContextMenu.HorizontalOffset = scaledX;
+                _trayIcon.ContextMenu.VerticalOffset = scaledY;
+                
+                _debugLogger.Info($"Context menu positioning - Cursor: ({cursorPos.X}, {cursorPos.Y}), DPI Scale: {dpiScale.DpiScaleX}x{dpiScale.DpiScaleY}, Scaled: ({scaledX}, {scaledY})");
+            }
+        }
+    }
+
     private void ShowWindow_Click(object sender, RoutedEventArgs e)
     {
         Show();
@@ -960,6 +983,17 @@ public partial class MainWindow : Window
         {
             _debugLogger.Warning($"Failed to load debug panel preferences: {ex.Message}");
         }
+    }
+
+    // P/Invoke for getting cursor position
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
     }
 }
 
