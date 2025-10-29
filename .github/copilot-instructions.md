@@ -180,6 +180,13 @@ DebugLogger.Instance.Debug("Debug details");
 
 ## Common Tasks & Patterns
 
+### Building and Running in Development
+
+- Always use this command to test build and run locally:
+  ```powershell
+  dotnet build; dotnet run -c Debug -r win-x64
+  ```
+
 ### Adding New Features
 
 1. Update TODO.md with task details

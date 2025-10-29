@@ -1,6 +1,6 @@
 # Bug Fixes
 
-- [ ] Fix excessive tray notifications relating to minimize/close to tray actions.
+- [x] Fix excessive tray notifications relating to minimize/close to tray actions.
 - [ ] Fix positioning of tray menu so that it appears next to the tray icon instead of in the bottom-right corner of the screen.
 - [ ] Fix issue where the app cannot be exited when the "Close to tray" option is enabled.
 

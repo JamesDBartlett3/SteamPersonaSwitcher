@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     private DebugPanelWindow? _debugPanelWindow;
 
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
+    
+    // Track whether we've shown the tray notification this session to avoid spam
+    private bool _hasShownTrayNotification = false;
 
     public MainWindow()
     {
@@ -679,9 +682,20 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized && MinimizeToTrayCheckBox.IsChecked == true)
         {
             Hide();
-            _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
-                "Application minimized to tray", 
-                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            
+            // Only show notification the first time per session (regardless of minimize or close)
+            if (!_hasShownTrayNotification)
+            {
+                _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                    "Application minimized to tray", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                _hasShownTrayNotification = true;
+                _debugLogger.Info("Sent to tray via minimize - notification shown");
+            }
+            else
+            {
+                _debugLogger.Info("Sent to tray via minimize - notification suppressed (already shown this session)");
+            }
         }
     }
 
@@ -692,9 +706,20 @@ public partial class MainWindow : Window
             e.Cancel = true;
             WindowState = WindowState.Minimized;
             Hide();
-            _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
-                "Application minimized to tray. Right-click the tray icon to exit.", 
-                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            
+            // Only show notification the first time per session (regardless of minimize or close)
+            if (!_hasShownTrayNotification)
+            {
+                _trayIcon?.ShowBalloonTip("Steam Persona Switcher", 
+                    "Application minimized to tray. Right-click the tray icon to exit.", 
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                _hasShownTrayNotification = true;
+                _debugLogger.Info("Sent to tray via close - notification shown");
+            }
+            else
+            {
+                _debugLogger.Info("Sent to tray via close - notification suppressed (already shown this session)");
+            }
         }
         else
         {
