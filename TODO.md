@@ -1,19 +1,33 @@
 # Bug Fixes
 
-- [x] "Remove" button on blank/new game-persona mapping entry should not be there. It should only appear on existing entries.
-- [x] Text in input fields should be left-aligned and vertically centered for better readability.
-- [x] The first row in the grid is either missing its top border, or the border is hidden under the header. Ensure consistent border rendering for all rows.
-- [x] While in the process of creating a new game-persona mapping, the new entry's row height is inconsistent with existing rows. Ensure uniform row height across all entries.
+- [ ] Fix excessive tray notifications relating to minimize/close to tray actions.
 
 # Enhancements
 
-- [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
+## UI Improvements
 
-  - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
-  - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
+- Game-Persona Mapping List
+  - [ ] Add "Display Name" column to show friendly game names alongside exe names. (e.g. "Elite Dangerous" for "EliteDangerous64.exe", "Foxhole" for "War.exe", etc.)
+    - [ ] Allow user to edit the display name in-place.
+    - [ ] Use display name in tooltips and logs instead of exe name where appropriate.
+- Settings toggles
+  - Tray
+    - [ ] "Start minimized to tray" should be a sub-setting under "Minimize to tray instead of taskbar."
+    - [ ] "Close to tray (instead of exiting)" should be a sub-setting under "Minimize to tray instead of taskbar."
+    - [ ] Add setting to auto-save game-persona mapping list whenever changes are made.
+  - [ ] Add "Auto-save changes to game-persona mapping list" setting.
+    - [ ] If auto-save is not enabled, prompt user to save changes before exiting the application.
+    - [ ] Indicate unsaved changes in the UI (e.g. with an asterisk next to the mapping list title).
+  - [ ] Separate settings into columns or sections for better organization (e.g. General Settings, Steam Settings, UI Settings, etc.).
+- [ ] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
+- [ ] Dark/Light Mode support for the entire application.
+  - [ ] Implement a toggle switch in the settings to allow users to switch between Dark and Light mode.
+  - [ ] Include option for app to follow OS theme automatically.
+- [ ] Show application status in the title bar (e.g. "Connected", "Disconnected", "Authenticating", etc.).
 
-- [ ] Streamline adding game exe names to game-persona mapping list:
+## UX/Workflow Improvements
 
+- Game-Persona Mapping List
   - [ ] Persona field should allow user to type in a custom persona name or select from a dropdown of existing personas.
     - [ ] Implement autocomplete functionality for the persona field to suggest existing personas as the user types.
   - [ ] When a user drags and drops a .exe file onto the application window, automatically add the exe name to the mapping list and prompt the user to select a persona for it.
@@ -21,32 +35,27 @@
   - [ ] Add a feature to discover games currently running on the system and add them to the mapping list.
     - [ ] Smart detection of running processes likely to be games (e.g. programs running fullscreen or windowed fullscreen, high CPU/GPU usage, etc.).
   - [ ] Provide an option to scan common installation directories for games and suggest adding them to the mapping list.
+  - [ ] When adding a new game-persona mapping and the executable is already running, get the window title of the running process and use it to auto-fill the display name field, but only if it is currently blank.
 
-- [x] Refactor separate console window into a dockable, hidden-by-default "Debug Log" panel within the main application window.
-
-  - [x] Implement a toggle button to show/hide the "Debug Log" panel.
-  - [x] Ensure the panel retains its state (visible/hidden) between application sessions.
+## Credential Management Improvements
 
 - [ ] Set the "Clear Credentials" button to execute the deletion after a delay of 10 seconds, and during that delay, change the "Clear Credentials" button to "UNDO CLEAR CREDENTIALS (10...9...8...etc.)" in red lettering, which actually just cancels the deletion request when the user clicks it before the timer runs out.
+- [ ] If connection to Steam fails and is not able to reconnect after the maximum number of attempts, show a dialog to the user with options to start retrying, edit credentials, or exit the application.
+
+## Back-end Improvements
 
 - [ ] Add option to run as a Windows Service for headless operation.
-
   - [ ] Include necessary configuration settings to manage service behavior.
   - [ ] The GUI becomes a configuration tool when running as a service.
   - [ ] The Start/Stop buttons in the GUI should control the service state when running as a service.
   - [ ] Quitting the application should not stop the service if it is running as a service.
   - [ ] If the service is running but the GUI is not, if an error occurs, launch the GUI to show the error.
-
-- [ ] Replace "Remove" button with a simple ❌ icon. Only display it on hover over existing entries.
-
-- [ ] Dark/Light Mode support for the entire application.
-  - [ ] Implement a toggle switch in the settings to allow users to switch between Dark and Light mode.
-  - [ ] Include option for app to follow OS theme automatically.
+- [ ] Exponentially back off reconnection attempts after repeated failures, up to a maximum delay (e.g., start with 5 seconds, then 10, 30, 60, up to a max of 15 minutes).
+- [ ] Support for .NET 9.0
 
 # Cleanup Tasks
 
-- [x] Find any unused code related to the old console view or pop-up dialogs and mark it as deprecated for future removal.
-- [x] Update documentation to reflect new UI changes and auto-save feature.
+- [ ] Remove any deprecated/dead/unreachable/unreferenced code and files.
 
 # Tests to Perform
 
