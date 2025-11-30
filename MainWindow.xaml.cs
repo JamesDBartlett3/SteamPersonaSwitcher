@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -39,6 +40,11 @@ public partial class MainWindow : Window
     
     // Track if we're waiting to update the start-minimized notification when connected
     private bool _waitingForConnectionToShowNotification = false;
+
+    // Clear credentials countdown
+    private System.Windows.Threading.DispatcherTimer? _clearCredentialsTimer;
+    private int _clearCredentialsCountdown = 0;
+    private bool _isClearCredentialsPending = false;
 
     public MainWindow()
     {
@@ -582,6 +588,244 @@ public partial class MainWindow : Window
         }
     }
 
+    private void DiscoverRunningGames_Click(object sender, RoutedEventArgs e)
+    {
+        _debugLogger.Info("Discover Running Games clicked");
+        
+        try
+        {
+            var discoveredGames = DiscoverPotentialGames();
+            
+            if (discoveredGames.Count == 0)
+            {
+                AppendStatus("ℹ️ No potential games found running. Try launching a game first.");
+                return;
+            }
+
+            // Show a dialog to let the user select which games to add
+            var dialog = new GameDiscoveryDialog(discoveredGames, _gamePersonaMappings);
+            dialog.Owner = this;
+            
+            if (dialog.ShowDialog() == true)
+            {
+                var selectedGames = dialog.SelectedGames;
+                int addedCount = 0;
+                
+                foreach (var game in selectedGames)
+                {
+                    // Check if already exists
+                    var existing = _gamePersonaMappings.FirstOrDefault(m => 
+                        m.ProcessName.Equals(game.ProcessName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (existing != null)
+                    {
+                        HighlightExistingMapping(existing);
+                        _debugLogger.Info($"Game already exists: {game.ProcessName}");
+                    }
+                    else
+                    {
+                        var newMapping = new GamePersonaMapping
+                        {
+                            ProcessName = game.ProcessName,
+                            PersonaName = string.Empty,
+                            IsCommitted = false
+                        };
+                        _gamePersonaMappings.Add(newMapping);
+                        addedCount++;
+                        _debugLogger.Info($"Added discovered game: {game.ProcessName}");
+                    }
+                }
+                
+                if (addedCount > 0)
+                {
+                    AppendStatus($"✓ Added {addedCount} game(s) to the mapping list. Please set persona names.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _debugLogger.Error($"Error discovering games: {ex.Message}");
+            AppendStatus($"❌ Error discovering games: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Discovers running processes that are likely to be games using various heuristics.
+    /// </summary>
+    private List<DiscoveredGame> DiscoverPotentialGames()
+    {
+        var potentialGames = new List<DiscoveredGame>();
+        var processes = Process.GetProcesses();
+        
+        // Known system/utility processes to exclude
+        var excludedProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "svchost", "csrss", "wininit", "services", "lsass", "smss", "winlogon",
+            "dwm", "explorer", "taskhostw", "sihost", "fontdrvhost", "ctfmon",
+            "conhost", "RuntimeBroker", "SearchHost", "StartMenuExperienceHost",
+            "ShellExperienceHost", "TextInputHost", "SystemSettings", "ApplicationFrameHost",
+            "WindowsTerminal", "powershell", "pwsh", "cmd", "Code", "devenv",
+            "msedge", "chrome", "firefox", "opera", "brave", "spotify", "discord",
+            "slack", "teams", "zoom", "skype", "steam", "steamwebhelper",
+            "EpicGamesLauncher", "Origin", "GOGGalaxy", "UbisoftConnect", "Battle.net",
+            "SecurityHealthSystray", "SecurityHealthService", "MsMpEng", "NisSrv",
+            "OneDrive", "Dropbox", "GoogleDriveSync", "iCloudServices",
+            "NVIDIA Web Helper", "nvcontainer", "NVDisplay.Container",
+            "AMD Radeon Software", "RadeonSoftware", "amdow", "amdfendrsr",
+            "Realtek", "audiodg", "IAStorDataMgrSvc", "IntelAudioService",
+            "SearchIndexer", "SearchProtocolHost", "SearchFilterHost",
+            "WmiPrvSE", "dllhost", "msiexec", "TrustedInstaller",
+            "SteamPersonaSwitcher", "notepad", "calc", "mspaint"
+        };
+
+        // Known game-related keywords in process names or paths
+        var gameKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "game", "play", "steam", "unity", "unreal", "engine", "client",
+            "launcher", "64", "x64", "dx11", "dx12", "vulkan", "opengl"
+        };
+
+        // Common game install paths
+        var gamePathIndicators = new string[]
+        {
+            @"\steamapps\common\",
+            @"\Epic Games\",
+            @"\GOG Galaxy\Games\",
+            @"\Origin Games\",
+            @"\Ubisoft Game Launcher\games\",
+            @"\Games\",
+            @"\Program Files\Steam\",
+            @"\Program Files (x86)\Steam\"
+        };
+
+        foreach (var process in processes)
+        {
+            try
+            {
+                // Skip excluded processes
+                if (excludedProcesses.Contains(process.ProcessName))
+                    continue;
+
+                // Skip processes with no main window (likely background services)
+                // But don't skip fullscreen games which may report no window handle
+                string? mainWindowTitle = null;
+                IntPtr mainWindowHandle = IntPtr.Zero;
+                
+                try
+                {
+                    mainWindowHandle = process.MainWindowHandle;
+                    mainWindowTitle = process.MainWindowTitle;
+                }
+                catch
+                {
+                    // Some processes don't allow access to window info
+                }
+
+                string? processPath = null;
+                try
+                {
+                    processPath = process.MainModule?.FileName;
+                }
+                catch
+                {
+                    // Access denied for some system processes
+                }
+
+                // Calculate a "game likelihood" score
+                int score = 0;
+                var reasons = new List<string>();
+
+                // Check if process has a visible window with a title
+                if (mainWindowHandle != IntPtr.Zero && !string.IsNullOrEmpty(mainWindowTitle))
+                {
+                    score += 20;
+                    reasons.Add("Has visible window");
+                }
+
+                // Check process path for game-related indicators
+                if (!string.IsNullOrEmpty(processPath))
+                {
+                    foreach (var indicator in gamePathIndicators)
+                    {
+                        if (processPath.Contains(indicator, StringComparison.OrdinalIgnoreCase))
+                        {
+                            score += 50;
+                            reasons.Add($"In game directory");
+                            break;
+                        }
+                    }
+                }
+
+                // Check process name for game-related keywords
+                foreach (var keyword in gameKeywords)
+                {
+                    if (process.ProcessName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += 10;
+                        reasons.Add($"Name contains '{keyword}'");
+                        break;
+                    }
+                }
+
+                // Check memory usage (games typically use more memory)
+                try
+                {
+                    var workingSet = process.WorkingSet64 / (1024 * 1024); // MB
+                    if (workingSet > 500)
+                    {
+                        score += 15;
+                        reasons.Add($"High memory ({workingSet}MB)");
+                    }
+                    else if (workingSet > 200)
+                    {
+                        score += 5;
+                        reasons.Add($"Medium memory ({workingSet}MB)");
+                    }
+                }
+                catch { }
+
+                // Check if process is using significant CPU (might indicate active game)
+                // Note: This is a snapshot, not continuous monitoring
+                try
+                {
+                    // Check thread count - games often have many threads
+                    if (process.Threads.Count > 20)
+                    {
+                        score += 10;
+                        reasons.Add($"Many threads ({process.Threads.Count})");
+                    }
+                }
+                catch { }
+
+                // Only include if score is high enough
+                if (score >= 30)
+                {
+                    var exeName = process.ProcessName + ".exe";
+                    
+                    // Don't add duplicates
+                    if (!potentialGames.Any(g => g.ProcessName.Equals(exeName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        potentialGames.Add(new DiscoveredGame
+                        {
+                            ProcessName = exeName,
+                            WindowTitle = mainWindowTitle ?? "",
+                            ProcessPath = processPath ?? "",
+                            Score = score,
+                            Reasons = reasons
+                        });
+                    }
+                }
+            }
+            catch
+            {
+                // Skip processes we can't access
+            }
+        }
+
+        // Sort by score (highest first)
+        return potentialGames.OrderByDescending(g => g.Score).ToList();
+    }
+
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
         _debugLogger.Info("Save Config clicked");
@@ -623,6 +867,14 @@ public partial class MainWindow : Window
     private void ClearCredentials_Click(object sender, RoutedEventArgs e)
     {
         _debugLogger.Info("Clear Credentials clicked");
+        
+        // If countdown is already in progress, cancel it
+        if (_isClearCredentialsPending)
+        {
+            CancelClearCredentials();
+            return;
+        }
+        
         try
         {
             if (!_credentialManager.HasSavedCredentials())
@@ -631,8 +883,89 @@ public partial class MainWindow : Window
                 return;
             }
 
-            AppendStatus("⚠️ Delete saved credentials? This will require re-entering username/password and Steam Guard on next login.");
-            _debugLogger.Info("Deleting credentials...");
+            // Start the countdown
+            StartClearCredentialsCountdown();
+        }
+        catch (Exception ex)
+        {
+            AppendStatus($"❌ Failed to initiate credential deletion: {ex.Message}");
+        }
+    }
+
+    private void StartClearCredentialsCountdown()
+    {
+        _isClearCredentialsPending = true;
+        _clearCredentialsCountdown = 10;
+        
+        // Update button appearance
+        UpdateClearCredentialsButton();
+        
+        AppendStatus("⚠️ Credentials will be deleted in 10 seconds. Click the button again to cancel.");
+        _debugLogger.Info("Clear credentials countdown started");
+        
+        // Create and start the timer
+        _clearCredentialsTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _clearCredentialsTimer.Tick += ClearCredentialsTimer_Tick;
+        _clearCredentialsTimer.Start();
+    }
+
+    private void ClearCredentialsTimer_Tick(object? sender, EventArgs e)
+    {
+        _clearCredentialsCountdown--;
+        
+        if (_clearCredentialsCountdown <= 0)
+        {
+            // Time's up - execute the deletion
+            _clearCredentialsTimer?.Stop();
+            _clearCredentialsTimer = null;
+            _isClearCredentialsPending = false;
+            
+            ExecuteClearCredentials();
+            ResetClearCredentialsButton();
+        }
+        else
+        {
+            // Update the button with remaining time
+            UpdateClearCredentialsButton();
+        }
+    }
+
+    private void UpdateClearCredentialsButton()
+    {
+        ClearCredentialsButton.Content = $"UNDO ({_clearCredentialsCountdown}...)";
+        ClearCredentialsButton.Foreground = new SolidColorBrush(Colors.Red);
+        ClearCredentialsButton.FontWeight = FontWeights.Bold;
+        ClearCredentialsButton.ToolTip = "Click to cancel credential deletion";
+    }
+
+    private void ResetClearCredentialsButton()
+    {
+        ClearCredentialsButton.Content = "Clear Credentials";
+        ClearCredentialsButton.Foreground = new SolidColorBrush(Colors.Black);
+        ClearCredentialsButton.FontWeight = FontWeights.Normal;
+        ClearCredentialsButton.ToolTip = "Delete saved login credentials";
+    }
+
+    private void CancelClearCredentials()
+    {
+        _clearCredentialsTimer?.Stop();
+        _clearCredentialsTimer = null;
+        _isClearCredentialsPending = false;
+        
+        ResetClearCredentialsButton();
+        
+        AppendStatus("✓ Credential deletion cancelled.");
+        _debugLogger.Info("Clear credentials countdown cancelled by user");
+    }
+
+    private void ExecuteClearCredentials()
+    {
+        try
+        {
+            _debugLogger.Info("Executing credential deletion...");
             
             _credentialManager.DeleteCredentials();
             
@@ -651,6 +984,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendStatus($"❌ Failed to delete credentials: {ex.Message}");
+            _debugLogger.Error($"Failed to delete credentials: {ex.Message}");
         }
     }
 

@@ -43,16 +43,16 @@
 - Game-Persona Mapping List
   - [ ] Persona field should allow user to type in a custom persona name or select from a dropdown of existing personas.
     - [ ] Implement autocomplete functionality for the persona field to suggest existing personas as the user types.
-  - [ ] When a user drags and drops a .exe file onto the application window, automatically add the exe name to the mapping list and prompt the user to select a persona for it.
-  - [ ] If the game.exe is already in the mapping list, highlight the existing entry instead of adding a duplicate.
-  - [ ] Add a feature to discover games currently running on the system and add them to the mapping list.
-    - [ ] Smart detection of running processes likely to be games (e.g. programs running fullscreen or windowed fullscreen, high CPU/GPU usage, etc.).
+  - [x] When a user drags and drops a .exe file onto the application window, automatically add the exe name to the mapping list and prompt the user to select a persona for it.
+  - [x] If the game.exe is already in the mapping list, highlight the existing entry instead of adding a duplicate.
+  - [x] Add a feature to discover games currently running on the system and add them to the mapping list.
+    - [x] Smart detection of running processes likely to be games (e.g. programs running fullscreen or windowed fullscreen, high CPU/GPU usage, etc.).
   - [ ] Provide an option to scan common installation directories for games and suggest adding them to the mapping list.
   - [ ] When adding a new game-persona mapping and the executable is already running, get the window title of the running process and use it to auto-fill the display name field, but only if it is currently blank.
 
 ## Credential Management Improvements
 
-- [ ] Set the "Clear Credentials" button to execute the deletion after a delay of 10 seconds, and during that delay, change the "Clear Credentials" button to "UNDO CLEAR CREDENTIALS (10...9...8...etc.)" in red lettering, which actually just cancels the deletion request when the user clicks it before the timer runs out.
+- [x] Set the "Clear Credentials" button to execute the deletion after a delay of 10 seconds, and during that delay, change the "Clear Credentials" button to "UNDO CLEAR CREDENTIALS (10...9...8...etc.)" in red lettering, which actually just cancels the deletion request when the user clicks it before the timer runs out.
 - [ ] If connection to Steam fails and is not able to reconnect after the maximum number of attempts, show a dialog to the user with options to start retrying, edit credentials, or exit the application.
 
 ## Back-end Improvements

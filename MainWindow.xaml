@@ -126,7 +126,12 @@
 
         <!-- Game Persona Mappings -->
         <GroupBox Grid.Row="2" Header="Game Persona Names" Padding="10">
-            <DataGrid x:Name="GamePersonaGrid" 
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <DataGrid Grid.Row="0" x:Name="GamePersonaGrid" 
                       AutoGenerateColumns="False"
                       CanUserAddRows="True"
                       CanUserDeleteRows="False"
@@ -255,6 +260,12 @@
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,8,0,0">
+                <Button Content="🔍 Discover Running Games" Click="DiscoverRunningGames_Click" 
+                        Width="180" Padding="8,5"
+                        ToolTip="Scan for running processes that may be games and add them to the list"/>
+            </StackPanel>
+            </Grid>
         </GroupBox>
 
         <!-- Control Buttons -->
@@ -263,7 +274,7 @@
             <Button x:Name="StopButton" Content="Stop" Click="Stop_Click" Width="100" IsEnabled="False"/>
             <Button Content="Save Config" Click="SaveConfig_Click" Width="100"/>
             <Button Content="Load Config" Click="LoadConfig_Click" Width="100"/>
-            <Button Content="Clear Credentials" Click="ClearCredentials_Click" Width="120"
+            <Button x:Name="ClearCredentialsButton" Content="Clear Credentials" Click="ClearCredentials_Click" Width="180"
                     ToolTip="Delete saved login credentials"/>
             <Button x:Name="DebugToggleButton" Content="Show Debug Log" Click="DebugToggle_Click" Width="120"
                     ToolTip="Toggle debug log panel"/>
