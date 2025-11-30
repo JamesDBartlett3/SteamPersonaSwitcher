@@ -475,6 +475,113 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        // Check if the dragged data contains files
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            // Only accept .exe files
+            if (files != null && files.Any(f => f.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
+            {
+                e.Effects = DragDropEffects.Copy;
+                e.Handled = true;
+                return;
+            }
+        }
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+            return;
+
+        var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+        if (files == null)
+            return;
+
+        foreach (var file in files)
+        {
+            if (!file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                _debugLogger.Debug($"Skipping non-exe file: {file}");
+                continue;
+            }
+
+            var exeName = Path.GetFileName(file);
+            _debugLogger.Info($"Dropped exe file: {exeName}");
+
+            // Check if this exe is already in the mapping list
+            var existingMapping = _gamePersonaMappings.FirstOrDefault(m => 
+                m.ProcessName.Equals(exeName, StringComparison.OrdinalIgnoreCase));
+
+            if (existingMapping != null)
+            {
+                // Highlight the existing entry instead of adding a duplicate
+                _debugLogger.Info($"Exe already exists in mapping list: {exeName}");
+                HighlightExistingMapping(existingMapping);
+                AppendStatus($"ℹ️ '{exeName}' is already in the mapping list - highlighted existing entry.");
+            }
+            else
+            {
+                // Add new mapping with empty persona name (user will fill it in)
+                var newMapping = new GamePersonaMapping
+                {
+                    ProcessName = exeName,
+                    PersonaName = string.Empty,
+                    IsCommitted = false
+                };
+                _gamePersonaMappings.Add(newMapping);
+                _debugLogger.Info($"Added new mapping for: {exeName}");
+                AppendStatus($"✓ Added '{exeName}' to mapping list - please enter a persona name.");
+
+                // Select the new row and focus the persona name cell for editing
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    GamePersonaGrid.SelectedItem = newMapping;
+                    GamePersonaGrid.ScrollIntoView(newMapping);
+                    
+                    // Begin edit on the persona name column (column index 1)
+                    var row = GamePersonaGrid.ItemContainerGenerator.ContainerFromItem(newMapping) as DataGridRow;
+                    if (row != null)
+                    {
+                        GamePersonaGrid.CurrentCell = new DataGridCellInfo(newMapping, GamePersonaGrid.Columns[1]);
+                        GamePersonaGrid.BeginEdit();
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+    }
+
+    private void HighlightExistingMapping(GamePersonaMapping mapping)
+    {
+        // Select the existing row
+        GamePersonaGrid.SelectedItem = mapping;
+        GamePersonaGrid.ScrollIntoView(mapping);
+
+        // Flash highlight effect to draw attention to the row
+        var row = GamePersonaGrid.ItemContainerGenerator.ContainerFromItem(mapping) as DataGridRow;
+        if (row != null)
+        {
+            var originalBackground = row.Background;
+            
+            // Create a flash animation
+            var flashAnimation = new System.Windows.Media.Animation.ColorAnimation
+            {
+                From = Colors.Yellow,
+                To = (originalBackground as SolidColorBrush)?.Color ?? Colors.White,
+                Duration = TimeSpan.FromMilliseconds(1000),
+                AutoReverse = false
+            };
+
+            var brush = new SolidColorBrush(Colors.Yellow);
+            row.Background = brush;
+            brush.BeginAnimation(SolidColorBrush.ColorProperty, flashAnimation);
+        }
+    }
+
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
         _debugLogger.Info("Save Config clicked");

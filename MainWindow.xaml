@@ -8,7 +8,10 @@
         SizeToContent="Height"
         Icon="icon.ico"
         Closing="Window_Closing"
-        ContentRendered="Window_ContentRendered">
+        ContentRendered="Window_ContentRendered"
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
