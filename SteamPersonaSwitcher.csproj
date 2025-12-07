@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>JamesDBartlett3</Authors>
     <Description>Automatically change your Steam profile name based on which game you're playing</Description>
     <ApplicationIcon>icon.ico</ApplicationIcon>
